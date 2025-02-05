@@ -2,10 +2,8 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import time
-import os
-from pygame import mixer
-import tkinter as tk
 import threading
+from Common import *
 import random
 
 def run_exercise(status_dict):
@@ -16,106 +14,63 @@ def run_exercise(status_dict):
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    cv2.namedWindow('Step Reaction Training', cv2.WND_PROP_FULLSCREEN)
+    cv2.setWindowProperty('Step Reaction Training', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     reps = 0
-    max_reps=5
+    max_reps=10
     timer_duration = 6  
     is_timer_active = False
     timer_remaining = timer_duration
     warning_message = None 
     stop_exercise=False
-
-    def stop_exercise_callback():
-        nonlocal stop_exercise
-        stop_exercise = True
-
-       # Create Tkinter window for "Done" button
-    def create_tkinter_window():
-        root = tk.Tk()
-        root.title("Control Panel")
-        root.geometry("300x100")
-        root.configure(bg="#C5EBE8")
-
-        label = tk.Label(
-            root,
-            text="Step Reaction Training",
-            font=("Arial", 14),
-            bg="#C5EBE8",
-            fg="#008878"
-        )
-        label.pack(pady=10)
-
-        btn_done = tk.Button(
-            root,
-            text="Done",
-            command=lambda: [stop_exercise_callback(), root.destroy()],
-            font=("Arial", 14),
-            bg="#FF6347",
-            fg="white",
-            width=10
-        )
-        btn_done.pack(pady=10)
-
-        root.mainloop()
+    counter=None
+    last_lower_sound_time=None
+    left_foot_color = (255, 0, 0)  # Blue for left foot
+    right_foot_color = (128, 0, 128)  # Purple for right foot
 
     # Start the Tkinter window in a separate thread
     threading.Thread(target=create_tkinter_window, daemon=True).start()
 
-
-
-    mixer.init()
-    success_path = os.path.join("sounds", "success.wav")
-    success_sound = mixer.Sound(success_path)
-    countdown_path=os.path.join("sounds", "countdown.wav")
-    countdown_sound=mixer.Sound(countdown_path)
-    last_lower_sound_time = None  
-    visible_path=os.path.join("sounds", "visible.wav")
-    visible_sound=mixer.Sound(visible_path)
-    great_path=os.path.join("sounds", "great.wav")
-    great_sound=mixer.Sound(great_path)
-
-
-    countdown_complete = False
-    def display_countdown(image, seconds_remaining):
-        overlay = image.copy()
-        alpha = 0.6  # Transparency factor
-
-        # Create a semi-transparent rectangle for the countdown text
-        cv2.rectangle(overlay, (0, 0), (image.shape[1], image.shape[0]), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0, image)
-
-        # Display the countdown number in the center of the screen
-        cv2.putText(
-            image,
-            str(seconds_remaining),
-            (image.shape[1] // 2 - 50, image.shape[0] // 2),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            12,  # Font size
-            (255, 255, 255),
-            16,
-            cv2.LINE_AA
+    countdown_complete = perform_countdown(
+            cap=cap,
+            countdown_sound=countdown_sound,
+            timer_duration=timer_duration,
+            display_countdown=display_countdown,
+            window_name="Step Reaction Training"
         )
-        
-
-    # Perform the countdown
-    start_time = time.time()
-    countdown_sound.play()
-    while time.time() - start_time < timer_duration:
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        seconds_remaining = int(timer_duration - (time.time() - start_time))
-        display_countdown(frame, seconds_remaining)
-        cv2.imshow("Step Reaction Training", frame)
-        if cv2.waitKey(10) & 0xFF == ord('q'):
-            cap.release()
-            cv2.destroyAllWindows()
-            return
-
-    # Set flag after countdown
     countdown_complete = True
 
+    dynamic_spots={}
+
+    def calibrate_spots(landmarks):
+        """Calibrate spot positions based on the patient's ankle positions."""
+        left_ankle = landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value]
+        right_ankle = landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value]
+
+        # Midpoint of ankles for central reference
+        mid_x = (left_ankle.x + right_ankle.x) / 2
+        floor_y = max(left_ankle.y, right_ankle.y) + 0.05  # Offset slightly below the ankles
+
+        # Use the ankle distance to calculate horizontal scaling
+        ankle_width = abs(left_ankle.x - right_ankle.x)
+
+        # Define spots relative to the ankle midpoint
+        dynamic_spots["extreme_left"] = (mid_x - 1.5 * ankle_width, floor_y)
+        dynamic_spots["left_center"] = (mid_x - 0.8 * ankle_width, floor_y)
+        dynamic_spots["right_center"] = (mid_x + 0.8 * ankle_width, floor_y)
+        dynamic_spots["extreme_right"] = (mid_x + 1.5 * ankle_width, floor_y)
+    def adjust_spot_distance(landmarks):
+        """Adjust spot distance dynamically based on leg reach."""
+        left_ankle = landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value]
+        right_ankle = landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value]
+        left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
+        leg_reach = abs(left_ankle.y - left_hip.y)
+
+        # Scale spots proportionally to leg reach
+        scale_factor = leg_reach * 0.5  # Adjust scaling factor as needed
+        for key, (x, y) in dynamic_spots.items():
+            dynamic_spots[key] = (x, max(left_ankle.y, right_ankle.y) + scale_factor)
     #Spot to foot mapping
     foot_mapping = {
         "extreme_left": "left_foot",
@@ -123,21 +78,6 @@ def run_exercise(status_dict):
         "right_center": "right_foot",
         "extreme_right": "right_foot"
     }
-
-    dynamic_spots={}
-
-    def calibrate_spots(landmarks):
-        #hips as reference for spot positions
-        left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
-        right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
-
-        mid_x = (left_hip.x + right_hip.x) / 2
-        mid_y = (left_hip.y + right_hip.y) / 2
-
-        dynamic_spots["extreme_left"] = (left_hip.x - 0.2, mid_y + 0.2)  # Left spot
-        dynamic_spots["left_center"] = (left_hip.x - 0.1, mid_y + 0.2)   # Left-center spot
-        dynamic_spots["right_center"] = (right_hip.x + 0.1, mid_y + 0.2) # Right-center spot
-        dynamic_spots["extreme_right"] = (right_hip.x + 0.2, mid_y + 0.2) # Right spot
 
     current_spot=None
     current_spot_color=(0,255,0)#green spot
@@ -153,7 +93,7 @@ def run_exercise(status_dict):
         while cap.isOpened() and reps<max_reps:
             
             if stop_exercise:  # Check if "Done" button was pressed
-                status_dict["Tap_Leg"] = True
+                status_dict["Step Reaction Training"] = True
                 break
 
 
@@ -175,7 +115,9 @@ def run_exercise(status_dict):
             if not calibrated and results.pose_landmarks:
                 landmarks = results.pose_landmarks.landmark
                 calibrate_spots(landmarks)
+                adjust_spot_distance(landmarks)  # Adjust spot positions
                 calibrated = True
+                print("Calibration complete. Dynamic spots initialized.")
                 continue
 
              # Draw the current spot on the screen
@@ -183,16 +125,22 @@ def run_exercise(status_dict):
                 current_spot = select_next_spot()
 
             
-            if calibrated:
+            if calibrated and current_spot:
                 spot_x, spot_y=dynamic_spots[current_spot]
                 height, width, _ = image.shape
                 spot_coords = (int(spot_x * width), int(spot_y * height))
 
+                required_foot = foot_mapping[current_spot]
+                spot_color = left_foot_color if required_foot == "left_foot" else right_foot_color
+
+
                 # Ensure spot coordinates are within the screen boundaries
                 if 0 <= spot_coords[0] < width and 0 <= spot_coords[1] < height:
-                    cv2.circle(image, spot_coords, 30, current_spot_color, -1)
+                    cv2.circle(image, spot_coords, 30, spot_color, -1)
+                    warning_message="Left leg" if spot_color==left_foot_color else "Right Leg" 
                 else:
-                    print(f"Spot {current_spot} is out of bounds: {spot_coords}")
+                    print(f"Spot {current_spot} is out of bounds: {spot_coords}")    
+                
                 try:
                     if results.pose_landmarks:
                         landmarks = results.pose_landmarks.landmark
@@ -212,6 +160,21 @@ def run_exercise(status_dict):
                             warning_message = f"Adjust Position: {', '.join(missing_landmarks)} not detected!"
 
                         else:
+                            
+                            # Get pixel coordinates for left and right foot indices
+                            left_foot = landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value]
+                            right_foot = landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value]
+
+                            left_foot_coords = (int(left_foot.x * width), int(left_foot.y * height))
+                            right_foot_coords = (int(right_foot.x * width), int(right_foot.y * height))
+
+                            # Draw left foot index (blue, larger)
+                            cv2.circle(image, left_foot_coords, 15, left_foot_color, -1)
+
+                            # Draw right foot index (purple, larger)
+                            cv2.circle(image, right_foot_coords, 15, right_foot_color, -1)
+
+
                             # Get coordinates for hip, knee, and ankle
                             left_foot_index = [landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].x,
                                 landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].y]
@@ -226,10 +189,10 @@ def run_exercise(status_dict):
                             distance = ((foot_x - spot_x)**2 + (foot_y - spot_y)**2)**0.5
 
                             # If distance is within a threshold, count as a successful tap
-                    if distance < 0.05:  # Adjust threshold as needed
-                        reps += 1
-                        current_spot = None  # Select the next spot
-                        mixer.Sound("success.wav").play()  #
+                            if distance < 0.05:  # Adjust threshold as needed
+                                reps += 1
+                                current_spot = None  # Select the next spot
+                                beep_sound.play()
 
                     else:
                         warning_message = "Pose not detected. Make sure full body is visible."
@@ -245,37 +208,7 @@ def run_exercise(status_dict):
                         visible_sound.play()
                         last_lower_sound_time = current_time
 
-            # Overlay for feedback
-            overlay = image.copy()
-            feedback_box_height = 60
-            cv2.rectangle(overlay, (0, 0), (640, feedback_box_height), (232, 235, 197), -1)
-            counter_box_height = 60
-            counter_box_width = 180
-            cv2.rectangle(overlay, (0, 480 - counter_box_height), (counter_box_width, 480), (232, 235, 197), -1)
-            cv2.rectangle(overlay, (640 - counter_box_width, 480 - counter_box_height), (640, 480), (232, 235, 197), -1)
-
-            # Blend overlay with the original image to make boxes transparent
-            alpha = 0.5  # Transparency factor
-            cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0, image)
-
-            # Display warning message
-            if warning_message:
-                if warning_message == "Good Job! Keep Going":
-                    cv2.putText(image, warning_message, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA)
-                else:
-                    cv2.putText(image, warning_message, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
-
-            # Display timer if active
-            if is_timer_active:
-                cv2.putText(image, str(int(timer_remaining)), (20, 480 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2, cv2.LINE_AA)
-
-            # Render repetition counter
-            cv2.putText(image, 'REPS', (640 - counter_box_width + 10, 480 - 40),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 0), 1, cv2.LINE_AA)
-            cv2.putText(image, str(reps), (640 - counter_box_width + 8, 480 - 10),  # Show the counter
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2, cv2.LINE_AA)
-
+            image = create_feedback_overlay(image, warning_message=warning_message, counter=reps, reps=reps)
             # Draw pose landmarks on the image
             mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
                                       mp_drawing.DrawingSpec(color=(245, 117, 66), thickness=2, circle_radius=2),
@@ -290,8 +223,8 @@ def run_exercise(status_dict):
     # Release resources
     cap.release()
     cv2.destroyAllWindows()
-    status_dict["Tap_Leg"]= True
+    status_dict["Step Reaction Training"]= True
 
 if __name__ == "__main__":
-    status_dict={"Tap_Leg": False}
+    status_dict={"Step Reaction Training": False}
     run_exercise(status_dict)

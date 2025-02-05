@@ -2,49 +2,56 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import time
-import os
-from pygame import mixer
+import threading
+from Common import *
+from exercise_state import stop_exercise_event
 
-def calculate_angle(a, b, c):
-    """
-    Calculate the angle between three points a, b, and c.
-    """
-    a = np.array(a)  # First point
-    b = np.array(b)  # Midpoint
-    c = np.array(c)  # Endpoint
+# Global variable to control the exercise loop
+stop_exercise = False
 
-    radians = np.arctan2(c[1] - b[1], c[0] - b[0]) - np.arctan2(a[1] - b[1], a[0] - b[0])
-    angle = np.abs(radians * 180.0 / np.pi)
+def run_exercise(exercise_status):
+    global stop_exercise
 
-    # Normalize the angle within [0, 180]
-    if angle > 180.0:
-        angle = 360 - angle
-
-    return angle
-
-def run_exercise():
     mp_drawing = mp.solutions.drawing_utils
     mp_pose = mp.solutions.pose 
 
    
     # Set up camera feed
     cap = cv2.VideoCapture(0)
-
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    cv2.namedWindow('Elbow Up Down Exercise', cv2.WND_PROP_FULLSCREEN)
+    cv2.setWindowProperty('Elbow Up Down Exercise', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    
     # Curl counter variables
     counter = 0
     tot_count=5
     reps=0
-    good_job_message_time=None
-    message_duration=2
+    warning_message=None
+    last_lower_sound_time=None
     stage=None
-    mixer.init()
-    beep_path=os.path.join("sounds", "beep.wav")
-    beep_sound=mixer.Sound(beep_path)
     
+    threading.Thread(target=create_tkinter_window, daemon=True).start()
+    
+    # Perform the countdown
+    countdown_complete = perform_countdown(
+        cap=cap,
+        countdown_sound=countdown_sound,
+        timer_duration=timer_duration,
+        display_countdown=display_countdown,
+        window_name="Elbow Up Down Exercise"
+    )
+
+    # Set flag after countdown
+    countdown_complete = True   
 
     # Setup Mediapipe Pose with specified confidence levels
     with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose:
         while cap.isOpened():
+            if stop_exercise:  # Check if "Done" button was pressed
+                status_dict["Elbow Up Down"] = True
+                break
+
             ret, frame = cap.read()
             if not ret:
                 break
@@ -57,7 +64,6 @@ def run_exercise():
             
             image.flags.writeable = True
             image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-
             warning_message=None
 
             # Extract pose landmarks
@@ -80,6 +86,10 @@ def run_exercise():
                     
                     if missing_landmarks:
                         warning_message=f"Adjust Position: {', '.join(missing_landmarks)} not detected!"
+                        current_time = time.time()
+                        if last_lower_sound_time is None or (current_time - last_lower_sound_time) >= 5:
+                            visible_sound.play()
+                            last_lower_sound_time = current_time
 
                     else:
 
@@ -107,7 +117,6 @@ def run_exercise():
                             counter += 1
                             beep_sound.play()
                             warning_message="Good Job! Keep Going"
-                            good_job_message_time=time.time()
                             if counter==tot_count:
                                 reps+=1
                                 warning_message="Good Job! Keep Going"
@@ -115,69 +124,38 @@ def run_exercise():
                                 
                 else:
                     warning_message="Pose not detected. Make sure full body is visible."
+                    current_time = time.time()
+                    if last_lower_sound_time is None or (current_time - last_lower_sound_time) >= 5:
+                        visible_sound.play()
+                        last_lower_sound_time = current_time
 
             except Exception as e:
                 warning_message="Pose not detected. Make sure full body is visible."
                 print("Error:", e)
+                current_time = time.time()
+                if last_lower_sound_time is None or (current_time - last_lower_sound_time) >= 5:
+                    visible_sound.play()
+                    last_lower_sound_time = current_time
 
-
-            overlay=image.copy()
-            feedback_box_height = 60
-            cv2.rectangle(overlay, (0, 0), (640, feedback_box_height), (232, 235, 197), -1)
-            counter_box_height = 60
-            counter_box_width = 180
-            cv2.rectangle(overlay, (0, 480 - counter_box_height), (counter_box_width, 480), (232, 235, 197), -1)
-            cv2.rectangle(overlay, (640 - counter_box_width, 480 - counter_box_height), (640, 480), (232, 235, 197), -1)
-
-            # Blend overlay with the original image to make boxes transparent
-            alpha = 0.5  # Transparency factor
-            cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0, image)
-
-            if good_job_message_time:
-                elapsed_time = time.time() - good_job_message_time
-                if elapsed_time < message_duration:
-                    warning_message = "Good Job! Keep Going"  # Ensure the message persists
-
-            if warning_message:
-                if warning_message=="Good Job! Keep Going":
-                    cv2.putText(image, warning_message, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255,0), 2, cv2.LINE_AA)
-                else:
-                    cv2.putText(image, warning_message, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
-            # Render curl counter on image
-            # Counter box (blue background) at the top-left corner
-            counter_box_height = 60
-            counter_box_width = 180
-
-
-            # Create a blue box for the counter at the bottom-right corner
-            counter_box_height = 60
-            counter_box_width = 180
-            #EXERCISE COUNTER
-            cv2.putText(image, str(counter), (20, 480 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 2, (20,0,0), 3, cv2.LINE_AA)
-            if counter%5==0:
-                counter=0
-            # REPETITION COUNTER
-            cv2.putText(image, 'REPS', (640 - counter_box_width + 10, 480 - 40),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0,0,0), 1, cv2.LINE_AA) #text says reps
-            cv2.putText(image, str(reps), (640 - counter_box_width + 8, 480 - 10),# Show the counter
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2, cv2.LINE_AA)
-            
             # Draw pose landmarks on the image
-            mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
-                                    mp_drawing.DrawingSpec(color=(245, 117, 66), thickness=2, circle_radius=2),
-                                    mp_drawing.DrawingSpec(color=(245, 66, 230), thickness=2, circle_radius=2))
+            mp_drawing.draw_landmarks(
+                image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
+                mp_drawing.DrawingSpec(color=(245, 117, 66), thickness=2, circle_radius=2),
+                mp_drawing.DrawingSpec(
+                    color=(44, 42, 196) if (stage in ['too_high', 'too_low']) else (67, 196, 42),
+                    thickness=2, circle_radius=2)
+            )
 
-            
-            cv2.imshow('Elbow Up and Down', image)
+            image = create_feedback_overlay(image, warning_message=warning_message, counter=counter, reps=reps)
+            cv2.imshow('Elbow Up Down Exercise', image)
 
-            # Break the loop if 'q' key is pressed
             if cv2.waitKey(10) & 0xFF == ord('q'):
                 break
 
-    # Release resources
     cap.release()
     cv2.destroyAllWindows()
+    status_dict["Elbow Up Down"]=True
 
 if __name__ == "__main__":
-    run_exercise()
+    status_dict = {"Elbow Up Down": False}
+    run_exercise(status_dict)

@@ -4,7 +4,7 @@ from pygame import mixer
 import cv2
 import time
 import tkinter as tk
-
+from exercise_state import exercise_status, stop_exercise_event
 mixer.init()
 stop_exercise=False
 success_path = os.path.join("sounds", "success.wav")
@@ -29,11 +29,14 @@ Hold_duration=10
 stop_exercise = False
 counter_box_height = 120
 counter_box_width = 250
-up_arrow = cv2.imread('C:/Users/Carl/Desktop/pose-estim/pose-estimation/poseVideos/down_arrow.png', cv2.IMREAD_UNCHANGED)
-down_arrow = cv2.imread('C:/Users/Carl/Desktop/pose-estim/pose-estimation/poseVideos/up_arrow.png', cv2.IMREAD_UNCHANGED)  
-arrow_width, arrow_height = 6,6  # Desired size
-up_arrow_= cv2.resize(up_arrow, (arrow_width, arrow_height), interpolation=cv2.INTER_AREA)
-down_arrow = cv2.resize(down_arrow, (arrow_width, arrow_height), interpolation=cv2.INTER_AREA)
+up_arrow = cv2.imread('C:/Users/Carl/Desktop/pose-estim/pose-estimation/poseVideos/up_arrow.png', cv2.IMREAD_UNCHANGED)
+down_arrow = cv2.imread('C:/Users/Carl/Desktop/pose-estim/pose-estimation/poseVideos/down_arrow.png', cv2.IMREAD_UNCHANGED)  
+up_arrow_scale=0.5
+down_arrow_scale=0.5
+up_arrow_size = (int(up_arrow.shape[1] * up_arrow_scale), int(up_arrow.shape[0] * up_arrow_scale))
+down_arrow_size = (int(down_arrow.shape[1] * down_arrow_scale), int(down_arrow.shape[0] * down_arrow_scale))
+resized_up_arrow= cv2.resize(up_arrow, up_arrow_size, interpolation=cv2.INTER_AREA)
+down_arrow = cv2.resize(down_arrow, down_arrow_size, interpolation=cv2.INTER_AREA)
 
 def calculate_angle(a, b, c):
     """
@@ -52,59 +55,38 @@ def calculate_angle(a, b, c):
 
     return angle
 
-def stop_exercise_callback():
-    global stop_exercise
-    stop_exercise = True
 
-def create_tkinter_window():
+def create_tkinter_window(exercise_name):
     root = tk.Tk()
     root.title("Control Panel")
     root.geometry("300x100")
     root.configure(bg="#C5EBE8")
 
-    label = tk.Label(root, text="Leg Raise Exercise", font=("Arial", 14), bg="#C5EBE8", fg="#008878")
+    label = tk.Label(root, text="Exercise", font=("Arial", 14), bg="#C5EBE8", fg="#008878")
     label.pack(pady=10)
-
-    btn_done = tk.Button(
-        root,
-        text="Done",
-        command=lambda: [stop_exercise_callback(), root.destroy()],
-        font=("Arial", 14),
-        bg="#FF6347",
-        fg="white",
-        width=10
-    )
-    btn_done.pack(pady=10)
-    root.mainloop()
-# Create Tkinter window for "Done" button
-def create_tkinter_window():
-    root = tk.Tk()
-    root.title("Control Panel")
-    root.geometry("300x100")
-    root.configure(bg="#C5EBE8")
-
-    label = tk.Label(
-        root,
-        text="Leg Raise Exercise",
-        font=("Arial", 14),
-        bg="#C5EBE8",
-        fg="#008878"
-    )
-    label.pack(pady=10)
-
-    btn_done = tk.Button(
-        root,
-        text="Done",
-        command=lambda: [stop_exercise_callback(), root.destroy()],
-        font=("Arial", 14),
-        bg="#FF6347",
-        fg="white",
-        width=10
-    )
-    btn_done.pack(pady=10)
-
-    root.mainloop()
     
+    btn_done = tk.Button(
+        root,
+        text="Done",
+        command=lambda: [set_exercise_done(exercise_name), root.destroy()],
+        font=("Arial", 14),
+        bg="#FF6347",
+        fg="white",
+        width=10
+    )
+    btn_done.pack(pady=10)
+    root.mainloop()
+
+def set_exercise_done(exercise_name):
+        if exercise_name in exercise_status:
+            exercise_status[exercise_name] = True
+            print(f"Exercise '{exercise_name}' marked as done.")
+            stop_exercise_event.set()
+        else:
+            print(f"Exercise '{exercise_name}' not found.")
+def stop_exercise_callback():
+    x=0
+
 def display_countdown(image, seconds_remaining):
         
         overlay = image.copy()
@@ -173,7 +155,7 @@ def create_feedback_overlay(image, warning_message=None, counter=None, reps=None
     # Display warning message
     if warning_message:
         color = (0, 255, 0) if "Good Job" in warning_message else (0, 0, 255)
-        cv2.putText(image, warning_message, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 3, cv2.LINE_AA)
+        cv2.putText(image, warning_message, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.5, color, 3, cv2.LINE_AA)
 
     # Render counters
     if counter is not None:

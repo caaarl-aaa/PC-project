@@ -2,10 +2,14 @@ import tkinter as tk
 import threading
 import vlc
 import os
-
+import tkinter as tk
+from exercise_state import exercise_status
 # Import your exercise modules
 import Arm_Extension
 import ElbowUpDown
+import Hamstring_Stretch
+import Partial_Wall_Squat
+import Seated_Knee_Extension
 import SideLegRaise
 import Single_Leg_Squat
 import wallWalk_leftHand
@@ -14,24 +18,13 @@ import calf
 #import calf_stretch
 import Step_Reaction_Training
 import Single_Leg_Squat
+import Side_Box_Step_Ups
+import Front_Box_Step_Ups
 
 
+exercise_buttons = {}
 
-exercise_status={
-    "Elbow Up Down":False,
-    "Arm Extension":False,
-    "Wall Walk Left Hand":False,
-    "Standing_Leg_Front_Lift": False,
-    "Single Leg Squat":False,
-    "Side Leg Raise":False,
-    "Side Box Step Ups": False,
-    "Front Box Step Ups":False,
-    "Step Reaction Training": False,
-    "Calf Stretch": False,
-    "Hamstring Stretch": False,
-    "Partial Wall Squat": False,
-    "Seated Knee Extension": False,
-}
+
 exercise_conditions = {
     "Elbow Up Down": lambda: exercise_status.get("Elbow Up Down", False),
     "Arm Extension": lambda: exercise_status.get("Arm Extension", False),
@@ -47,79 +40,93 @@ exercise_conditions = {
     "Partial Wall Squat": lambda: exercise_status.get("Partial Wall Squat", False),
     "Seated Knee Extension": lambda: exercise_status.get("Seated Knee Extension", False),
 }
-video_path = r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\tutorial.mp4"
-#video_path = r"C:\Users\Notnik_kg\Desktop\PoseEstimation\poseVideos\6.mp4"
+#video_path = r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\tutorial.mp4"
+exercise_videos = {
+    "Elbow Up Down": r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\6.mp4",
+    "Arm Extension": r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\6.mp4",
+    "Wall Walk Left Hand": r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\6.mp4",
+    "Standing Leg Front Lift": r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\6.mp4",
+    "Single Leg Squat": r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\6.mp4",
+    "Side Leg Raise": r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\6.mp4",
+    "Side Box Step Ups": r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\6.mp4",
+    "Front Box Step Ups": r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\6.mp4",
+    "Step Reaction Training": r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\6.mp4",
+    "Calf Stretch": r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\6.mp4",
+    "Hamstring Stretch": r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\6.mp4",
+    "Partial Wall Squat": r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\Partial_wall_Squat.mp4",
+    "Seated Knee Extension": r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\seated_knee_extension.mp4",
+}
 
 
 # Define a function to start exercises
-def start_ElbowUpDown_Camera():
+def start_Elbow_Up_Down():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        ElbowUpDown.run_exercise(exercise_status)
         if exercise_status["Elbow Up Down"]:
-            update_button_state()
+            update_button_state("Elbow Up Down")
     threading.Thread(target=run).start()
 
-def start_Arm_Extension_Camera():
+def start_Arm_Extension():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        Arm_Extension.run_exercise(exercise_status)
         if exercise_status["Arm Extension"]:
-            update_button_state()
+            update_button_state("Arm Extension")
     threading.Thread(target=run).start()
 
-def start_wallWalk_leftHand_Camera():
+def start_Wall_Walk_Left_Hand():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        wallWalk_leftHand.run_exercise(exercise_status)
         if exercise_status["Wall Walk Left Hand"]:
-            update_button_state()
+            update_button_state("Wall Walk Left Hand")
     threading.Thread(target=run).start()
 
 def start_Standing_Leg_Front_Lift():
     def run():
         Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
         if exercise_status["Standing Leg Front Lift"]:
-            update_button_state()
+            update_button_state("Standing Leg Front Lift")
     threading.Thread(target=run).start()
 
 def start_Single_Leg_Squat():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        Single_Leg_Squat.run_exercise(exercise_status)
         if exercise_status["Single Leg Squat"]:
-            update_button_state()
+            update_button_state("Single Leg Squat")
     threading.Thread(target=run).start()
 
-def start_SideLegRaise_camera():
+def start_Side_Leg_Raise():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        SideLegRaise.run_exercise(exercise_status)
         if exercise_status["Side Leg Raise"]:
-            update_button_state()
+            update_button_state("Side Leg Raise")
     threading.Thread(target=run).start()
 
 def start_Side_Box_Step_Ups():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        Side_Box_Step_Ups.run_exercise(exercise_status)
         if exercise_status["Side Box Step Ups"]:
-            update_button_state()
+            update_button_state("Side Box Step Ups")
     threading.Thread(target=run).start()
 
 def start_Front_Box_Step_Ups():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        Front_Box_Step_Ups.run_exercise(exercise_status)
         if exercise_status["Front Box Step Ups"]:
-            update_button_state()
+            update_button_state("Front Box Step Ups")
     threading.Thread(target=run).start()
 
 def start_Step_Reaction_Training():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        Step_Reaction_Training.run_exercise(exercise_status)
         if exercise_status["Step Reaction Training"]:
-            update_button_state()
+            update_button_state("Step Reaction Training")
     threading.Thread(target=run).start()
 
-def start_calf():
+def start_Calf_Stretch():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        calf.run_exercise(exercise_status)
         if exercise_status["Calf Stretch"]:
-            update_button_state()
+            update_button_state("Calf Stretch")
     threading.Thread(target=run).start()
 
 #def startcalf_stretch():
@@ -127,32 +134,36 @@ def start_calf():
 
 def start_Hamstring_Stretch():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        Hamstring_Stretch.run_exercise(exercise_status)
         if exercise_status["Hamstring Stretch"]:
-            update_button_state()
+            update_button_state("Hamstring Stretch")
     threading.Thread(target=run).start()
+
+
+
 
 def start_Partial_Wall_Squat():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        Partial_Wall_Squat.run_exercise(exercise_status)
         if exercise_status["Partial Wall Squat"]:
-            update_button_state()
+            update_button_state("Partial Wall Squat")
     threading.Thread(target=run).start()
 
 def start_Seated_Knee_Extension():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        Seated_Knee_Extension.run_exercise(exercise_status)
         if exercise_status["Seated Knee Extension"]:
-            update_button_state()
+            update_button_state("Seated Knee Extension")
     threading.Thread(target=run).start()
 
-def update_button_state():
-    if exercise_status["Standing_Leg_Front_Lift"]:
-        btn_leg_raise["bg"]="gray"
-        btn_leg_raise["state"]="disabled"
+def update_button_state(Exercise):
+    btn = exercise_buttons.get(Exercise)
+    if btn and btn.winfo_exists():  # Ensure button exists
+        btn["bg"] = "gray"
+        btn["state"] = "disabled"
 
 
-def show_instructional_video(window, exercise_name):
+def show_instructional_video(window, exercise_name, video_path, go_back_function):
     def play_video(video_path):
         if not os.path.exists(video_path):
             print(f"Error: Video file not found at {video_path}")
@@ -185,8 +196,7 @@ def show_instructional_video(window, exercise_name):
     def stop_video_and_go_back():
         if vlc_player is not None:
             vlc_player.stop()  # Stop the video
-        open_injury_page(window, "Knee Injuries")  # Navigate back to injury page
-
+        go_back_function()  # Use the provided function for navigation
 
     # Clear the current window
     for widget in window.winfo_children():
@@ -216,14 +226,14 @@ def show_instructional_video(window, exercise_name):
     btn_back = tk.Button(
         window,
         text="Back",
-        command= stop_video_and_go_back, 
+        command=stop_video_and_go_back,  # Use the new function
         font=("Arial", 14),
         bg="#008878",
         fg="white"
     )
     btn_back.pack(pady=10)
 
-    vlc_player=None
+    vlc_player = None
     # Play Video
     play_video(video_path)
 
@@ -309,42 +319,39 @@ def open_injury_page(window, injury_type):
     # Based on the injury type, show the corresponding exercises
     if injury_type == "Arm Injuries":
         exercises = [
-            ("Elbow Up Down", start_ElbowUpDown_Camera),
-            ("Arm Extension", start_Arm_Extension_Camera),
-            ("Wall Walk Left Hand", start_wallWalk_leftHand_Camera)
+            ("Elbow Up Down", start_Elbow_Up_Down),
+            ("Arm Extension", start_Arm_Extension),
+            ("Wall Walk Left Hand", start_Wall_Walk_Left_Hand)
         ]
     else:
         exercises = [
-            ("Standing Leg Front Lift", lambda: show_instructional_video(window, start_Standing_Leg_Front_Lift)),
-            ("Single Leg Squat", lambda: show_instructional_video(window, start_Single_Leg_Squat)),
-            ("Side Leg Raise", lambda:show_instructional_video(window,start_SideLegRaise_camera)),
-            ("Side Box Step Ups", lambda:show_instructional_video(window,start_Side_Box_Step_Ups)),
-            ("Front Box Step Ups", lambda:show_instructional_video(window,start_Front_Box_Step_Ups)),
-            ("Step Reaction Training", lambda: show_instructional_video(window, start_Step_Reaction_Training)),
-            ("Calf Stretch", lambda: show_instructional_video(window,start_calf)),
-            ("Hamstring Stretch", lambda: show_instructional_video(window,start_Hamstring_Stretch)),
-            ("Partial Wall Squat", lambda: show_instructional_video(window,start_Partial_Wall_Squat)),
-            ("Seated Knee Extension", lambda: show_instructional_video(window,start_Seated_Knee_Extension)),
+            ("Standing Leg Front Lift", start_Standing_Leg_Front_Lift),
+            ("Single Leg Squat", start_Single_Leg_Squat),
+            ("Side Leg Raise", start_Side_Leg_Raise),
+            ("Side Box Step Ups", start_Side_Box_Step_Ups),
+            ("Front Box Step Ups", start_Front_Box_Step_Ups),
+            ("Step Reaction Training", start_Step_Reaction_Training),
+            ("Calf Stretch", start_Calf_Stretch),
+            ("Hamstring Stretch", start_Hamstring_Stretch),
+            ("Partial Wall Squat", start_Partial_Wall_Squat),
+            ("Seated Knee Extension", start_Seated_Knee_Extension),
         ]
 
       # Add buttons for exercises
+
     for text, command in exercises:
-        # Determine the state and color dynamically for each exercise
-        condition = exercise_conditions.get(text, lambda: False)()
-        bg_color = "gray" if condition else "#008878"
-        state = "disabled" if condition else "normal"
-        
+        video_path = exercise_videos.get(text, "")
         btn = tk.Button(
             window,
             text=text,
-            command=command,
+            command=lambda t=text, c=command, v=video_path: show_instructional_video(window, c, v),
             font=("Arial", 14),
-            bg=bg_color,
+            bg="#008878",
             fg="white",
-            width=22,
-            state=state
+            width=22
         )
         btn.pack(pady=10)
+        exercise_buttons[text]=btn
 
     # Add a "Back" button to return to the main page
     btn_back = tk.Button(

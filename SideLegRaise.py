@@ -6,9 +6,7 @@ def run_exercise():
         
     mp_drawing = mp.solutions.drawing_utils
     mp_pose = mp.solutions.pose
-
-
-    video_path = "poseVideos/11.mp4"  
+ 
 
 
     cap = cv2.VideoCapture(0)
@@ -94,7 +92,7 @@ def run_exercise():
                                     mp_drawing.DrawingSpec(color=(245, 66, 230), thickness=2, circle_radius=2))
 
         
-            cv2.imshow('Horizontal Leg Raise', image)
+            cv2.imshow('Side Leg Raise', image)
 
             
             if cv2.waitKey(10) & 0xFF == ord('q'):

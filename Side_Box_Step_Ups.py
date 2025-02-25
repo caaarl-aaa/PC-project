@@ -36,15 +36,32 @@ def run_exercise(status_dict):
         display_countdown=display_countdown,
         window_name="Side Box Step Up"
     )
+    def is_facing_camera(landmarks, frame_width):
+        """ Determines if the patient is facing the camera based on shoulder positions. """
+        left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
+        right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
+        nose = landmarks[mp_pose.PoseLandmark.NOSE.value]
+
+        # Shoulder width in pixels
+        shoulder_width = abs(right_shoulder.x - left_shoulder.x) * frame_width
+
+        # Nose alignment check (should be centered between shoulders)
+        nose_x = nose.x * frame_width
+        left_shoulder_x = left_shoulder.x * frame_width
+        right_shoulder_x = right_shoulder.x * frame_width
+
+        if shoulder_width < frame_width * 0.25:  # Threshold for being too sideways
+            return False  # Patient is turned sideways
+
+        if not (left_shoulder_x - frame_width * 0.05 < nose_x < right_shoulder_x + frame_width * 0.05):
+            return False  # Nose is too far left or right
+
+        return True  # Patient is facing forward
 
     with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose:
         while cap.isOpened():
             if stop_exercise:  # Check if "Done" button was pressed
                 status_dict["Side Box Step Up"] = True
-                break
-
-            ret, frame = cap.read()
-            if not ret:
                 break
 
             ret, frame = cap.read()
@@ -59,7 +76,7 @@ def run_exercise(status_dict):
             results = pose.process(image)
             image.flags.writeable = True
             image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-            frame_height, frame_width, _ = image.shape
+            frame_height, frame_width, _ = frame.shape
            
             try:
                 if results.pose_landmarks:
@@ -108,23 +125,24 @@ def run_exercise(status_dict):
                     # Draw LEFT ankle
                     cv2.circle(image, (left_heel_x, left_heel_y), 10, (0, 0, 255), -1)
                     # Check if the left foot is on the box
-                    if box_x_min < left_heel_x < box_x_max and box_y_min < left_heel_y < box_y_max:
-                        # Check if the user has stepped onto the box
-                        if stage is None or stage == "off_box":
-                            if angle<160:
-                                feedback = "Step-Up Completed! Step down"
-                                stage = "on_box"
-                                counter+=1
-                                beep_sound.play()
-                                print("on box:")
-                                print(angle)
-                    elif stage == "on_box" and angle>173:
-                                feedback = "Step Up"
-                                stage = "off_box"
-                                print('off box:')
-                                print(angle)
-
-
+                    if not is_facing_camera(landmarks,frame_width):
+                        if box_x_min < left_heel_x < box_x_max and box_y_min < left_heel_y < box_y_max:
+                            # Check if the user has stepped onto the box
+                            if stage is None or stage == "off_box":
+                                if angle<160:
+                                    feedback = "Step-Up Completed! Step down"
+                                    stage = "on_box"
+                                    counter+=1
+                                    beep_sound.play()
+                                    print("on box:")
+                                    print(angle)
+                        elif stage == "on_box" and angle>173:
+                                    feedback = "Step Up"
+                                    stage = "off_box"
+                                    print('off box:')
+                                    print(angle)
+                    else:
+                        feedback="Face the camera for correct tracking!"
 
                 else:
                     feedback = "Pose Not Detected. Ensure Full Body is Visible."

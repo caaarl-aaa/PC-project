@@ -3,7 +3,7 @@ import mediapipe as mp
 import numpy as np
 import time
 import threading
-from Common import *  # Assuming `Common` has necessary imports like `calculate_angle`, `create_feedback_overlay`, etc.
+from Common import * 
 
 def run_exercise(status_dict):
     mp_drawing = mp.solutions.drawing_utils
@@ -17,14 +17,11 @@ def run_exercise(status_dict):
 
     reps = 0
     timer_duration = 6
-    is_timer_active = False
     warning_message = None
     stop_exercise = False
     HOLD_TIME = 20
     hold_elapsed_time = 0  # Track total hold time
     hold_start_time = None
-    current_leg = 0
-    posture_correct = False
     last_beep_time=None
     last_displayed_second = HOLD_TIME
     timer_remaining = HOLD_TIME
@@ -84,6 +81,10 @@ def run_exercise(status_dict):
 
                     if missing_landmarks:
                         warning_message = f"Adjust Position: {', '.join(missing_landmarks)} not detected!"
+                        current_time = time.time()
+                        if last_lower_sound_time is None or (current_time - last_lower_sound_time) >= 5:
+                            visible_sound.play()
+                            last_lower_sound_time = current_time
                     else:
                         # Extract coordinates
                         left_hip = [landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x,
@@ -103,7 +104,7 @@ def run_exercise(status_dict):
                         cv2.putText(image, f"Hip: {int(hip_angle)}s", (10, 125), 
                                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
                         # Check posture
-                        if 140 <= knee_angle and hip_angle <= 124:
+                        if 140 <= knee_angle and hip_angle <= 120:
                             posture_correct = True
                             if hold_start_time is None:
                                 hold_start_time = time.time()
@@ -121,13 +122,27 @@ def run_exercise(status_dict):
                                 posture_correct = False
                                 last_displayed_second=HOLD_TIME
                         else:
+                            if hip_angle>120:
+                                current_time = time.time()
+                                if last_lower_sound_time is None or (current_time - last_lower_sound_time) >= 5:
+                                    bend_hip_sound.play()
+                                    last_lower_sound_time = current_time
+                            elif knee_angle<140:
+                                current_time=time.time()
+                                if last_lower_sound_time is None or (current_time - last_lower_sound_time) >= 5:
+                                    ext_leg_sound.play()
+                                    last_lower_sound_time = current_time
+                            
                             posture_correct = False
                             hold_start_time = None  # Pause hold time
                             warning_message = "Adjust your position (straighten leg & lean forward)."
 
                 else:
                     warning_message = "Pose not detected. Make sure full body is visible."
-
+                    current_time = time.time()
+                    if last_lower_sound_time is None or (current_time - last_lower_sound_time) >= 5:
+                        visible_sound.play()
+                        last_lower_sound_time = current_time
             except Exception as e:
                 warning_message = "Pose not detected. Make sure full body is visible."
                 print("Error:", e)

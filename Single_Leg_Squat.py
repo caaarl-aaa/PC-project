@@ -3,7 +3,6 @@ import mediapipe as mp
 import numpy as np
 import time
 import threading
-import pygame
 from collections import deque  # To track recent angles for smoothing
 import tkinter as tk
 from Common import *

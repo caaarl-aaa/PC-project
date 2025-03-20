@@ -23,18 +23,29 @@ ext_leg_path=os.path.join("sounds","ext_leg.wav")
 ext_leg_sound=mixer.Sound(ext_leg_path)
 bend_hip_path=os.path.join("sounds","bend_hip.wav")
 bend_hip_sound=mixer.Sound(bend_hip_path)
+
 great_path = os.path.join("sounds", "great.wav")
 great_sound = mixer.Sound(great_path)
+
 beep_path=os.path.join("sounds", "beep.wav")
 beep_sound=mixer.Sound(beep_path)
+
+goodjob_path=os.path.join("sounds", "Good_job_Keep_going.mp3")
+goodjob_sound=mixer.Sound(goodjob_path)
+
+
+
+# tutorial_path=os.path.join("poseVideos", "tutorial.mp4")
+# tutorial=mixer.Sound(tutorial_path)
+
 timer_duration = 6
 is_timer_active = False
 Hold_duration=10
 stop_exercise = False
 counter_box_height = 120
 counter_box_width = 250
-up_arrow = cv2.imread('C:/Users/Carl/Desktop/pose-estim/pose-estimation/poseVideos/up_arrow.png', cv2.IMREAD_UNCHANGED)
-down_arrow = cv2.imread('C:/Users/Carl/Desktop/pose-estim/pose-estimation/poseVideos/down_arrow.png', cv2.IMREAD_UNCHANGED)  
+up_arrow = cv2.imread('C:/Users/Notnik_kg/Desktop/project1/PoseEstimation/poseVideos/up_arrow.png', cv2.IMREAD_UNCHANGED)
+down_arrow = cv2.imread('C:/Users/Notnik_kg/Desktop/project1/PoseEstimation/poseVideos/down_arrow.png', cv2.IMREAD_UNCHANGED)
 up_arrow_scale=0.5
 down_arrow_scale=0.5
 up_arrow_size = (int(up_arrow.shape[1] * up_arrow_scale), int(up_arrow.shape[0] * up_arrow_scale))
@@ -68,7 +79,7 @@ def create_tkinter_window(exercise_name):
 
     label = tk.Label(root, text="Exercise", font=("Arial", 14), bg="#C5EBE8", fg="#008878")
     label.pack(pady=10)
-    
+
     btn_done = tk.Button(
         root,
         text="Done",
@@ -92,7 +103,7 @@ def stop_exercise_callback():
     x=0
 
 def display_countdown(image, seconds_remaining):
-        
+
         overlay = image.copy()
         alpha = 0.6  # Transparency factor
 
@@ -158,8 +169,8 @@ def create_feedback_overlay(image, warning_message=None, counter=None, reps=None
 
     # Display warning message
     if warning_message:
-        color = (0, 255, 0) if "Good Job" in warning_message else (0, 0, 255)
-        cv2.putText(image, warning_message, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.5, color, 3, cv2.LINE_AA)
+        color = (0, 255, 0) if "Good Job! Keep going" in warning_message else (0, 255, 0)
+        cv2.putText(image, warning_message, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.5, color, 3, cv2.LINE_AA)
 
     # Render counters
     if counter is not None:

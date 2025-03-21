@@ -1,9 +1,9 @@
 import customtkinter as ctk
 import random
 from PIL import Image, ImageTk
-import second_page_login
 
 def open_second_page():
+    import second_page_login
     for widget in app.winfo_children():
         widget.destroy()  # Remove current widgets
     second_page_login.create_login_page(app)
@@ -20,7 +20,7 @@ app.geometry(f"{screen_width}x{screen_height}+0+0")
 # Create Canvas for Background Pattern
 canvas = ctk.CTkCanvas(app, width=screen_width, height=screen_height, bg= "#89B4B7", highlightthickness=0)
 canvas.place(relwidth=1, relheight=1)
-screen_width+=350
+screen_width+=350   
 
 # Generate Random Circles for Background
 positions = [(150, 30),(450,90),(350,screen_height-170),(674,233),(-30,300),(screen_width-80,100),(screen_width-700,70),(screen_width-400,235),(screen_width-300,623),(screen_width-50,screen_height-50)]

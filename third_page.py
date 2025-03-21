@@ -1,10 +1,11 @@
 import customtkinter as ctk
-import sqlite3
 from datetime import datetime
 from PIL import Image, ImageTk  # For handling images/icons
 import tkinter as tk
 from tkcalendar import Calendar
 import main
+from firebase_config import db
+from google.cloud import firestore
 
 today_date = datetime.today().strftime("%Y-%m-%d")
 selected_date=today_date
@@ -14,50 +15,127 @@ current_month=datetime.today().month
 current_day=datetime.today().day
 sidebar_buttons={}
 selected_exercise=None
+
 def create_third_page(app,current_user):
     for widget in app.winfo_children():
         widget.destroy() 
 
 
     notifications="No Notifications to show"
-    conn = sqlite3.connect('hospital.db')
-    c = conn.cursor()
-    patient_id = current_user[1]
-    c.execute('''SELECT exercise_name, sets, reps FROM exercises WHERE patient_id = ? AND date=?''', (patient_id, today_date))
-    exercises = c.fetchall()
-    c.execute('''SELECT name, age, injury FROM patients WHERE id=?''', (patient_id,))
-    patient_data=c.fetchone()
-    if patient_data:
-        patient_name, patient_age, patient_injury = patient_data
-    else:
-        patient_name, patient_age, patient_injury = "Unknown", "Unknown", "Unknown"
-    c.execute('''SELECT type,message FROM notifications WHERE patient_id = ? AND date=?''', (patient_id, today_date))
-    notifications = c.fetchall()
-    c.execute('''SELECT date, type, message FROM notifications WHERE patient_id=? ORDER BY date DESC''',(patient_id,))
-    all_notifications=c.fetchall()
-    grouped_notifications = {}
-    for date, type_, message in all_notifications:
-        if date not in grouped_notifications:
-            grouped_notifications[date] = []  # Initialize list if date is not in dictionary
-        grouped_notifications[date].append((type_, message))
-    c.execute('''SELECT injury, doctor_id from patients WHERE id=?''',(patient_id,))
-    doc=c.fetchone()
-    if doc:
-        doctor_id=doc[1]
-        dinjury=doc[0]
-        c.execute('''SELECT email, phone_number, profession, hospital, name FROM doctors WHERE id=?''',(doctor_id,))
-        doc_info=c.fetchone()
-        if doc_info:
-            demail, dphone, dprofession, dhospital, dname=doc_info
-        else:
-            demail, dphone, dprofession, dhospital, dname=(None, None, None, None, None)
-    else:
-        doctor_id=None
-        demail, dphone, dprofession, dhospital, dname=(None, None, None, None, None)
-    conn.close()
+    patient_id = current_user.get("patient_id")
+    def fetch_exercises(patient_id, selected_date):
+        exercises_list=[]
+        exercises_ref=db.collection("exercises").where("patient_id","==", patient_id)
+        exercises=exercises_ref.stream()
+
+        for ex in exercises:
+            ex_data=ex.to_dict()
+            if "date" in ex_data and ex_data["date"]==selected_date:
+                exercises_list.append((ex_data["exercise_name"],ex_data["sets"],ex_data["reps"], ex_data["degrees_from"], ex_data["degrees_to"]))
+            elif "dates" in ex_data and selected_date in ex_data["dates"]:
+                exercises_list.append((ex_data["exercise_name"],ex_data["sets"],ex_data["reps"], ex_data["degrees_from"], ex_data["degrees_to"]))
+            elif "date_start" in ex_data and "date_end" in ex_data:
+                if ex_data["date_start"]<=selected_date<=ex_data["date_end"]:
+                    exercises_list.append((ex_data["exercise_name"],ex_data["sets"],ex_data["reps"], ex_data["degrees_from"], ex_data["degrees_to"]))
+
+        return exercises_list
+    
+    exercise_list=fetch_exercises(patient_id, today_date)
+
+    def fetch_notifications(patient_id):
+        notifications_ref = db.collection("notifications").where("patient_id", "==", patient_id)
+        notifications = notifications_ref.stream()
+
+        # Group notifications by date
+        notifications_dict = {}
+
+        for n in notifications:
+            doc_data = n.to_dict()
+            date = doc_data.get("date", "Unknown Date")  # Ensure a date exists
+            message_type = doc_data.get("type", "General")
+            message = doc_data.get("message", "No message available")
+
+            if date not in notifications_dict:
+                notifications_dict[date] = []
+
+            notifications_dict[date].append((message_type, message))
+
+        return notifications_dict  # Return grouped dictionary
+
+    notifications = fetch_notifications(patient_id)
+
+    def fetch_today_notifications(patient_id):
+        notifications_ref = db.collection("notifications").where("patient_id", "==", patient_id).where("date","==", today_date)
+        notifications = notifications_ref.stream()
+
+        # Group notifications by date
+        notifications_dict = {}
+
+        for n in notifications:
+            doc_data = n.to_dict()
+            date = doc_data.get("date", "Unknown Date")  # Ensure a date exists
+            message_type = doc_data.get("type", "General")
+            message = doc_data.get("message", "No message available")
+
+            if date not in notifications_dict:
+                notifications_dict[date] = []
+
+            notifications_dict[date].append((message_type, message))
+
+        return notifications_dict 
+    today_notifications=fetch_today_notifications(patient_id)
+
+    def fetch_doctor_id(patient_id):
+        patient_ref = db.collection("patients").where("id", "==", patient_id)
+        patients=patient_ref.stream()
+        for patient in patients:
+            patient_data = patient.to_dict()
+            doctor_id = patient_data.get("doctor_id")
+        return doctor_id  # Get doctor_id field
+    doctor_id = fetch_doctor_id(patient_id)
 
     
+    def fetch_doctor_details(doctor_id): 
+        if not doctor_id:
+            return None, None, None, None, None, None, None
 
+        doctor_query = db.collection("doctors").where("id", "==", doctor_id).stream()  # Get query results
+        
+        doctor_doc = None
+        for doc in doctor_query:
+            doctor_doc = doc.to_dict()  
+            break 
+
+        if doctor_doc:
+            return (
+                doctor_doc.get("email"),
+                doctor_doc.get("injury"),
+                doctor_doc.get("phone_number"),
+                doctor_doc.get("profession"),
+                doctor_doc.get("hospital"),
+                doctor_doc.get("name"),
+                doctor_doc.get("id")
+            )
+        return None, None, None, None, None, None, None
+
+    doctor_details = fetch_doctor_details(doctor_id)
+
+    if doctor_details is None:
+        doctor_details = (None, None, None, None, None, None, None)  
+    else:
+        demail, dinjury, dphone, dprofession, dhospital, dname, did = doctor_details
+        print(f"FETCHED:{did}")
+
+    def fetch_patient_details(patient_id):
+        patient_ref = db.collection("patients").document(patient_id).get()
+        
+        if patient_ref.exists:
+            patient_info = patient_ref.to_dict()
+            return patient_info.get("name"), patient_info.get("age"), patient_info.get("injury")
+        return None, None, None
+    
+    patient_name, patient_age, patient_injury=fetch_patient_details(patient_id)    
+    
     main_frame = ctk.CTkFrame(app, width=app.winfo_screenwidth(), height=app.winfo_screenheight(), fg_color="#CCDEE0")
     main_frame.place(x=0, y=0)
     def go_back_to_login():
@@ -105,18 +183,15 @@ def create_third_page(app,current_user):
         global selected_date
         selected_date=calendar.get_date()
         
-        conn = sqlite3.connect('hospital.db')
-        c = conn.cursor()
-        patient_id = current_user[1]
-        c.execute('''SELECT exercise_name, sets, reps FROM exercises WHERE patient_id = ? AND date=?''', (patient_id, selected_date))
-        exercise_list = c.fetchall()
-        conn.close()
+        
+        exercise_list = fetch_exercises(patient_id, selected_date)
+        
         for widget in session_frame.winfo_children():
-            if widget != tooday_label:  # ✅ Preserve `tooday_label`
+            if widget != tooday_label:  
                 widget.destroy()
 
         if exercise_list:
-            for i, (ex, sets, reps) in enumerate(exercise_list):
+            for i, (ex, sets, reps, a_,b_) in enumerate(exercise_list):
                 create_image_canvas(session_frame, "assets_gui/bar.png", 600, 280, ex, sets, reps, row=i+1)
         else:
             no_exercise_label = ctk.CTkLabel(session_frame, text="No exercises found for this date.", font=("Arial", 18))
@@ -174,7 +249,7 @@ def create_third_page(app,current_user):
         sidebar_buttons[btn_text] = btn
     switch_page("Dashboard")
     
-    # 🎨 **DASHBOARD PAGE**
+    #  ✨✨**DASHBOARD PAGE**✨✨
     stars_icon=ctk.CTkImage(light_image=Image.open("assets_gui/stars.png"), size=(100, 100))
     dashboard_label = ctk.CTkLabel(pages["Dashboard"],width=500,height=105,corner_radius=20, text="Doing Great,\nKeep it up!      ",image=stars_icon,compound="right", font=("Garamond", 43, "bold"),text_color="#D9D9D9", fg_color="#0B2B32", bg_color="#CCDEE0")
     dashboard_label.place(x=730, y=20)
@@ -215,15 +290,16 @@ def create_third_page(app,current_user):
     date_label.place(x=230,y=370)
     scroll_frame = ctk.CTkScrollableFrame(pages["Dashboard"], width=280, height=300, fg_color="white", corner_radius=20)
     scroll_frame.place(x=100, y=410)
-    for idx, (title, message) in enumerate(notifications):
-        frame = ctk.CTkFrame(scroll_frame, fg_color="white", corner_radius=5)
-        frame.pack(fill="x", pady=5, padx=5)
+    for date, messages in today_notifications.items():
+        for message_type, message_text in messages:  # Loop over tuples inside the list
+            frame = ctk.CTkFrame(scroll_frame, fg_color="white", corner_radius=5)
+            frame.pack(fill="x", pady=5, padx=5)
 
-        title_label = ctk.CTkLabel(frame, text=title, font=("Georgia", 18, "bold"), text_color="black")
-        title_label.pack(anchor="w", padx=10, pady=(5, 0))
+            title_label = ctk.CTkLabel(frame, text=message_type, font=("Georgia", 18, "bold"), text_color="black")
+            title_label.pack(anchor="w", padx=10, pady=(5, 0))
 
-        message_label = ctk.CTkLabel(frame, text=message, font=("Georgia", 17), text_color="#3D5051", wraplength=250, justify="left")
-        message_label.pack(anchor="w", padx=10, pady=(0, 5))
+            message_label = ctk.CTkLabel(frame, text=message_text, font=("Georgia", 17), text_color="#3D5051", wraplength=250, justify="left")
+            message_label.pack(anchor="w", padx=10, pady=(0, 5))
 
     exscroll_frame = ctk.CTkScrollableFrame(pages["Dashboard"], width=600, height=500, fg_color="white", corner_radius=20)
     exscroll_frame.place(x=600, y=150)
@@ -232,46 +308,44 @@ def create_third_page(app,current_user):
     see_label = ctk.CTkLabel(exscroll_frame, text="See My Session", font=("Georgia", 17,"underline"),text_color="#3D5051", cursor="hand2")
     see_label.grid(row=0, column=1, padx=(180,10))
     see_label.bind("<Button-1>", lambda event: switch_page("My Session")) 
-    for i,(ex, sets, reps) in enumerate(exercises):
+    for i,(ex, sets, reps,a_,b_) in enumerate(exercise_list):
         create_image_canvas(exscroll_frame, "assets_gui/bar.png", 600, 280, ex, sets, reps, row=i+1)
 
 
-    # 🎨 **MY SESSION PAGE**
+    # ✨✨**MY SESSION PAGE**✨✨
 
 
     def start_exercise():
         global selected_exercise
         if selected_exercise is None:
-            print("No exercise selected!")  # You can display a message instead
             return
         
         ex, sets, reps = selected_exercise
         exercise_function_mapping = {
-        "Elbow Up Down": main.start_Elbow_Up_Down,
-        "Arm Extension": main.start_Arm_Extension,
-        "Wall Walk Left Hand": main.start_Wall_Walk_Left_Hand,
+        "Elbow Up Down": main.start_ElbowUpDown_Camera,
+        "Arm Extension": main.start_Arm_Extension_Camera,
+        "Wall Walk Left Hand": main.start_wallWalk_leftHand_Camera,
         "Standing Leg Front Lift": main.start_Standing_Leg_Front_Lift,
         "Single Leg Squat": main.start_Single_Leg_Squat,
-        "Side Leg Raise": main.start_Side_Leg_Raise,
+        "Side Leg Raise": main.start_SideLegRaise_camera,
         "Side Box Step Ups": main.start_Side_Box_Step_Ups,
         "Front Box Step Ups": main.start_Front_Box_Step_Ups,
-        "Step Reaction Training": main.start_Step_Reaction_Training,
-        "Calf Stretch": main.start_Calf_Stretch,
+        "Step Reaction": main.start_Step_Reaction_Training,
+        "Calf Stretch": main.start_calf,
         "Hamstring Stretch": main.start_Hamstring_Stretch,
         "Partial Wall Squat": main.start_Partial_Wall_Squat,
         "Seated Knee Extension": main.start_Seated_Knee_Extension,
+        "Standing Left Leg Front Lift":main.start_Standing_Leg_Front_Lift
     }
 
         if ex not in exercise_function_mapping:
-            print(f"Exercise '{ex}' not found!")
             return
 
         start_function = exercise_function_mapping[ex]  # Get the function for the selected exercise
-        video_path = main.exercise_videos.get(ex, "")
+        """video_path = main.exercise_videos.get(ex, "")
 
         if not video_path:
-            print("No video found for this exercise.")
-            return
+            return"""
 
         # Open a new window for exercise details
         new_window = ctk.CTkToplevel(app)
@@ -282,7 +356,7 @@ def create_third_page(app,current_user):
         start_button=None
         def close_and_start():
             new_window.destroy()
-            start_function()
+            start_function()###################################
 
         label = ctk.CTkLabel(new_window, text=f"Exercise: {ex}\nSets: {sets}\nReps: {reps}",
                             font=("Arial", 20, "bold"))
@@ -290,7 +364,6 @@ def create_third_page(app,current_user):
 
         def enable_start():
             if start_button:
-                print("Enabling Start button after video ends.")
                 start_button.configure(state="normal")
 
         start_button = ctk.CTkButton(
@@ -307,7 +380,7 @@ def create_third_page(app,current_user):
     )
         start_button.pack(pady=10)
 
-        main.show_instructional_video(new_window, start_function, video_path, lambda: new_window.destroy())
+        main.show_instructional_video(new_window, start_function)
 
         # Make sure Start button is enabled after video ends
         new_window.after(1000, enable_start) 
@@ -359,7 +432,7 @@ def create_third_page(app,current_user):
     start_button.place(x=620, y=715)
 
     
-    # 🎨 **MY PROGRESS PAGE**
+    # ✨✨ **MY PROGRESS PAGE**✨✨
     progress_label = ctk.CTkLabel(pages["My Progress"], text="Therapy Progress", font=("Arial", 24, "bold"))
     progress_label.pack(pady=20)
 
@@ -368,7 +441,7 @@ def create_third_page(app,current_user):
     progress_text = ctk.CTkLabel(progress_chart, text="📊 Progress Chart (Mock Data)", font=("Arial", 16))
     progress_text.pack()
 
-    # 🎨 **NOTIFICATIONS PAGE**
+    # ✨✨ **NOTIFICATIONS PAGE**✨✨
     ncanvas = ctk.CTkCanvas(pages["Notifications"], width=3500, height=1100,bg = "#FFFFFF",bd = 0,highlightthickness = 0,relief = "ridge")
     ncanvas.place(x=0, y=0)
     back_image = Image.open("assets_gui/background.png").resize((3500, 2000), Image.LANCZOS)
@@ -403,7 +476,7 @@ def create_third_page(app,current_user):
 )
     scrollable_frame.place(x=220, y=140)
     
-    for date,messages in grouped_notifications.items():
+    for date,messages in notifications.items():
         date_label = ctk.CTkLabel(scrollable_frame, text=date, font=("Georgia", 16, "bold"), text_color="#3D5051")
         date_label.pack(anchor="w", padx=10, pady=(10, 5))
         for type_,message in messages:
@@ -416,7 +489,62 @@ def create_third_page(app,current_user):
             message_label = ctk.CTkLabel(fframe, text=message, font=("Georgia", 17), text_color="black", wraplength=250, justify="left")
             message_label.pack(anchor="w", padx=10, pady=(0, 5))
 
-    # 🎨 **CONTACT PAGE**
+    # ✨✨**CONTACT PAGE**✨✨
+    def create_chat_room(doctor_id, patient_id):
+        """ Creates a chat document for the doctor and patient if it does not exist """
+        
+        chat_id = f"{doctor_id}_{patient_id}"  # Unique chat ID for each doctor-patient chat
+        chat_ref = db.collection("chats").document(chat_id)  # Reference to chat document
+
+        if not chat_ref.get().exists:
+            chat_ref.set({
+                "doctor_id": doctor_id,
+                "patient_id": patient_id,
+                "created_at": datetime.utcnow()  # Store timestamp of chat creation
+            })
+            print(f"Chat room created for {doctor_id} and {patient_id}")
+        else:
+            print("Chat room already exists!")
+
+    def send_message(doctor_id, patient_id, sender_id, text):
+        create_chat_room(did, patient_id)
+        """ Sends a message from sender_id (doctor or patient) to Firestore chat """
+        
+        chat_id = f"{doctor_id}_{patient_id}"
+        chat_ref = db.collection("chats").document(chat_id)
+
+        message = {
+            "sender_id": sender_id,
+            "text": text,
+            "timestamp": datetime.utcnow()
+        }
+
+        chat_ref.update({
+            "messages": firestore.ArrayUnion([message])
+        })
+
+        print(f"Message sent: {text}")
+
+    def listen_for_messages(doctor_id, patient_id, callback):
+        """ Listens for new messages in a chat and calls the callback function """
+        
+        chat_id = f"{doctor_id}_{patient_id}"
+        chat_ref = db.collection("chats").document(chat_id)
+
+        def on_snapshot(doc_snapshot, changes, read_time):
+            if doc_snapshot:
+                doc = doc_snapshot[0] if isinstance(doc_snapshot, list) else doc_snapshot
+
+                if doc.exists:
+                    chat_data = doc.to_dict()
+                    messages = chat_data.get("messages", [])  # Get all messages
+                    messages.sort(key=lambda x: x.get("timestamp", ""))  # Sort messages by timestamp
+                    callback(messages) 
+        chat_ref.on_snapshot(on_snapshot)
+
+
+    
+
     contact_label = ctk.CTkLabel(pages["Contact"], text="Contact Us", font=("Garamond", 60, "bold"))
     contact_label.place(x=40, y=60)
     
@@ -454,8 +582,15 @@ def create_third_page(app,current_user):
     contact_entry.pack(pady=10)
     contact_entry.bind("<FocusIn>", lambda e: contact_entry.delete("1.0", "end") if contact_entry.get("1.0", "end-1c") == "How can we help?" else None)
     contact_entry.bind("<FocusOut>", lambda e: contact_entry.insert("1.0", "How can we help?") if contact_entry.get("1.0", "end-1c").strip() == "" else None)
-    login_button = ctk.CTkButton(contact_form, text="Submit", width=200, height=45, corner_radius=20, fg_color="#092E34", bg_color="white", font=('Arial', 23, 'bold'))
-    login_button.pack()
+    def send_message_callback():
+            text = contact_entry.get("1.0", "end-1c")
+            if text:
+                send_message(did, patient_id, patient_id, text)
+                contact_entry.delete("1.0", "end")
+                print("Message sent")
+
+    submit_button = ctk.CTkButton(contact_form, text="Submit", width=200, height=45, corner_radius=20, fg_color="#092E34", bg_color="white", font=('Arial', 23, 'bold'), command=send_message_callback)
+    submit_button.pack()
     dis_label = ctk.CTkLabel(contact_form, text="By contacting us, you agree to our Terms\nof service and Privacy Policy", font=("Arial", 12))
     dis_label.pack()
     # Show Default Page

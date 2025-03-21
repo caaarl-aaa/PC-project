@@ -1,9 +1,28 @@
 import customtkinter as ctk
 from PIL import Image, ImageTk
-import sqlite3
 import tkinter.messagebox as messagebox
-import third_page
+import doctor_login
+from firebase_config import db
 
+loaded_images={}
+def preload_images():
+    """Load and resize images once at the beginning to optimize performance"""
+    global loaded_images
+    image_data = {
+    "cir_image": {"path": "assets_gui/cir_pg2.png", "size": (1200, 1200)},
+    "cir2_image": {"path": "assets_gui/cir2_pg2.png", "size": (1200, 1200)},
+    "heart_icon": {"path": "assets_gui/heart_icon.png", "size": (500, 500)},
+    }
+
+    for key, data in image_data.items():
+        try:
+            image = Image.open(data["path"]).resize(data["size"], Image.LANCZOS)
+            loaded_images[key] = ImageTk.PhotoImage(image)
+        except Exception as e:
+            print(f"Error loading {data["path"]}: {e}")
+
+
+preload_images()
 
 def create_login_page(app):
 
@@ -11,6 +30,7 @@ def create_login_page(app):
         widget.destroy()
 
     def open_third_page(current_user):
+        import third_page
         third_page.create_third_page(app, current_user)  # Load third page
 
     current_user=None
@@ -22,21 +42,15 @@ def create_login_page(app):
     # Canvas to draw circular elements
     canvas = ctk.CTkCanvas(app, width=2500, height=3000, bg="#E0E0D7", highlightthickness=0)
     canvas.place(x=-50, y=-50)
-    cir_image = Image.open("assets_gui/cir_pg2.png").resize((1200, 1200), Image.LANCZOS)
-    cir_photo = ImageTk.PhotoImage(cir_image)
-    canvas.create_image(400,100,image=cir_photo)
-    canvas.cirimage = cir_photo
-    cir2_image = Image.open("assets_gui/cir2_pg2.png").resize((1200, 1200), Image.LANCZOS)
-    cir2_photo = ImageTk.PhotoImage(cir2_image)
-    canvas.create_image(200,200,image=cir2_photo)
-    canvas.cir2image = cir2_photo
+    if "cir_image" in loaded_images:
+        canvas.create_image(400,100, image=loaded_images["cir_image"])
+    if "cir2_image" in loaded_images:
+        canvas.create_image(200,200, image=loaded_images["cir2_image"])
     
     # Load Heart + Cross Icon (Replace with actual path if needed)
     try:
-        heart_icon = Image.open("assets_gui/heart_icon.png")  # Replace with correct path
-        heart_icon = heart_icon.resize((500, 500))
-        app.heart_icon = ImageTk.PhotoImage(heart_icon)  # Store in app to prevent garbage collection
-        canvas.create_image(350, 400, image=app.heart_icon)  # Use stored reference
+        if "heart_icon" in loaded_images:
+            canvas.create_image(350,400, image=loaded_images["heart_icon"])
     except:
         print("Error")  # If the image isn't available, it won't crash
 
@@ -61,11 +75,9 @@ def create_login_page(app):
         label.pack(pady=50)
 
     def open_doctor_login_window():
-        new_window = ctk.CTkToplevel(app)
-        new_window.title("Doctor Login")
-        new_window.geometry("300x200")
-        label = ctk.CTkLabel(new_window, text="Doctor Login Window", font=("Arial", 14))
-        label.pack(pady=50)
+        for widget in app.winfo_children():
+            widget.destroy()  # Remove current widgets
+            doctor_login.create_login_page(app)
 
 
     # Forgot Password Label
@@ -88,13 +100,24 @@ def create_login_page(app):
 
     
     def authenticate(username, password, role):
-        conn = sqlite3.connect('hospital.db')
-        c = conn.cursor()
+        users_ref = db.collection("users").where("username", "==", username).where("password", "==", password).where("role","==", role)
+        users = list(users_ref.stream())
+        
+        if users:
+            return users[0].to_dict()
+        return None
 
-        c.execute('SELECT * FROM users WHERE username = ? AND password = ? AND role = ?', (username, password, role))
-        user = c.fetchone()
-        conn.close()
-        return user
+    def get_patient_id(username):
+        
+        patients_ref = db.collection("patients").where("username", "==", username)
+        patients = patients_ref.stream()
+        
+        for patient in patients:
+            print(f"ID: {patient.get("id")}")
+            return patient.get("id")  # Firestore Document ID
+            
+        return None
+
 
     def submit():
         username = username_entry.get()
@@ -105,12 +128,9 @@ def create_login_page(app):
             global current_user
             current_user = user
              # Fetch patient ID based on user
-            with sqlite3.connect('hospital.db') as conn:
-                c = conn.cursor()
-                c.execute("SELECT id FROM patients WHERE name = ?", (username,))
-                patient_data = c.fetchone()
-                if patient_data:
-                    current_user = (current_user[0], patient_data[0])  # Include patient ID
+            patient_id=get_patient_id(username)
+            if patient_id:
+                current_user["patient_id"]=patient_id
             #print("Logged-in Patient:", current_user)
             open_third_page(current_user)
 

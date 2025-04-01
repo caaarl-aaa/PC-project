@@ -6,7 +6,7 @@ from tkcalendar import Calendar
 import main
 from firebase_config import db
 from google.cloud import firestore
-
+from exercise_page import open_exercise_page
 today_date = datetime.today().strftime("%Y-%m-%d")
 selected_date=today_date
 todayy=datetime.today().strftime("%d %B %Y")
@@ -127,11 +127,15 @@ def create_third_page(app,current_user):
         print(f"FETCHED:{did}")
 
     def fetch_patient_details(patient_id):
-        patient_ref = db.collection("patients").document(patient_id).get()
+        patient_ref = db.collection("patients").where("id", "==", patient_id).stream()
         
-        if patient_ref.exists:
-            patient_info = patient_ref.to_dict()
-            return patient_info.get("name"), patient_info.get("age"), patient_info.get("injury")
+        patient_doc = None
+        for doc in patient_ref:
+            patient_doc = doc.to_dict()  
+            break 
+
+        if patient_doc:
+            return patient_doc.get("name"), patient_doc.get("age"), patient_doc.get("injury")
         return None, None, None
     
     patient_name, patient_age, patient_injury=fetch_patient_details(patient_id)    
@@ -314,77 +318,37 @@ def create_third_page(app,current_user):
 
     # ✨✨**MY SESSION PAGE**✨✨
 
-
     def start_exercise():
         global selected_exercise
         if selected_exercise is None:
             return
-        
+
         ex, sets, reps = selected_exercise
         exercise_function_mapping = {
-        "Elbow Up Down": main.start_ElbowUpDown_Camera,
-        "Arm Extension": main.start_Arm_Extension_Camera,
-        "Wall Walk Left Hand": main.start_wallWalk_leftHand_Camera,
-        "Standing Leg Front Lift": main.start_Standing_Leg_Front_Lift,
-        "Single Leg Squat": main.start_Single_Leg_Squat,
-        "Side Leg Raise": main.start_SideLegRaise_camera,
-        "Side Box Step Ups": main.start_Side_Box_Step_Ups,
-        "Front Box Step Ups": main.start_Front_Box_Step_Ups,
-        "Step Reaction": main.start_Step_Reaction_Training,
-        "Calf Stretch": main.start_calf,
-        "Hamstring Stretch": main.start_Hamstring_Stretch,
-        "Partial Wall Squat": main.start_Partial_Wall_Squat,
-        "Seated Knee Extension": main.start_Seated_Knee_Extension,
-        "Standing Left Leg Front Lift":main.start_Standing_Leg_Front_Lift
-    }
+            "Elbow Up Down": main.start_ElbowUpDown_Camera,
+            "Arm Extension": main.start_Arm_Extension_Camera,
+            "Wall Walk Left Hand": main.start_wallWalk_leftHand_Camera,
+            "Standing Leg Front Lift": main.start_Standing_Leg_Front_Lift,
+            "Single Leg Squat": main.start_Single_Leg_Squat,
+            "Side Leg Raise": main.start_SideLegRaise_camera,
+            "Side Box Step Ups": main.start_Side_Box_Step_Ups,
+            "Front Box Step Ups": main.start_Front_Box_Step_Ups,
+            "Step Reaction": main.start_Step_Reaction_Training,
+            "Calf Stretch": main.start_calf,
+            "Hamstring Stretch": main.start_Hamstring_Stretch,
+            "Partial Wall Squat": main.start_Partial_Wall_Squat,
+            "Seated Knee Extension": main.start_Seated_Knee_Extension,
+            "Standing Left Leg Front Lift": main.start_Standing_Leg_Front_Lift
+        }
 
         if ex not in exercise_function_mapping:
             return
 
-        start_function = exercise_function_mapping[ex]  # Get the function for the selected exercise
-        """video_path = main.exercise_videos.get(ex, "")
+        start_function = exercise_function_mapping[ex]
+        # Switch to the exercise page within the same window
+        open_exercise_page(app, pages["My Session"], ex, sets, reps, start_function, current_user)
 
-        if not video_path:
-            return"""
-
-        # Open a new window for exercise details
-        new_window = ctk.CTkToplevel(app)
-        new_window.geometry(f"{app.winfo_screenwidth()}x{app.winfo_screenheight()}") 
-        new_window.attributes('-topmost', True)
-        new_window.title(f"Exercise: {ex}")
-
-        start_button=None
-        def close_and_start():
-            new_window.destroy()
-            start_function()###################################
-
-        label = ctk.CTkLabel(new_window, text=f"Exercise: {ex}\nSets: {sets}\nReps: {reps}",
-                            font=("Arial", 20, "bold"))
-        label.pack(pady=20)
-
-        def enable_start():
-            if start_button:
-                start_button.configure(state="normal")
-
-        start_button = ctk.CTkButton(
-        new_window,
-        text="Start Exercise",
-        width=200,
-        height=60,
-        corner_radius=20,
-        font=("Arial", 25, "bold"),
-        fg_color="#39526D",
-        text_color="#092E34",
-        state="disabled",
-        command=close_and_start
-    )
-        start_button.pack(pady=10)
-
-        main.show_instructional_video(new_window, start_function)
-
-        # Make sure Start button is enabled after video ends
-        new_window.after(1000, enable_start) 
-        
+      
 
     ccanvas = ctk.CTkCanvas(pages["My Session"], width=1800, height=1000, bg="#CCDEE0", highlightthickness=0)
     ccanvas.place(x=0, y=0)

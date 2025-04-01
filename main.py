@@ -2,7 +2,10 @@ import tkinter as tk
 import threading
 import vlc
 import os
-
+import customtkinter as ctk
+from PIL import Image, ImageTk  # For handling images/icons
+from exercise_page import open_exercise_page
+from video_utils import show_instructional_video
 # Import your exercise modules
 import Arm_Extension
 import ElbowUpDown
@@ -14,8 +17,12 @@ import calf
 #import calf_stretch
 import Step_Reaction_Training
 import Single_Leg_Squat
-
-
+import Side_Box_Step_Ups
+import Front_Box_Step_Ups
+import Hamstring_Stretch
+import Partial_Wall_Squat
+import Seated_Knee_Extension
+from exercise_ui import ExerciseUI
 
 exercise_status={
     "Elbow Up Down":False,
@@ -45,26 +52,32 @@ exercise_conditions = {
     "Calf Stretch": lambda: exercise_status.get("Calf Stretch", False),
     "Hamstring Stretch": lambda: exercise_status.get("Hamstring Stretch", False),
     "Partial Wall Squat": lambda: exercise_status.get("Partial Wall Squat", False),
-    "Seated Knee Extension": lambda: exercise_status.get("Seated Knee Extension", False),
+    "Seated Knee Extension": lambda: exercise_status.get("Seated Knee Extension", False)
 }
 video_path = r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\tutorial.mp4"
 #video_path = r"C:\Users\Notnik_kg\Desktop\PoseEstimation\poseVideos\6.mp4"
 
+def create_fullscreen_window():
+    win = tk.Toplevel()
+    win.configure(bg="#C5EBE8")  # Match your CTk style if needed
+    win.attributes('-fullscreen', True)
+    #win.state("zoomed")
+    win.update()
+    return win
+
 
 # Define a function to start exercises
-def start_ElbowUpDown_Camera():
-    def run():
-        ElbowUpDown.run_exercise(exercise_status)
-        if exercise_status["Elbow Up Down"]:
-            update_button_state()
-    threading.Thread(target=run).start()
-
+def start_ElbowUpDown_Camera(exercise_frame):
+    exercise_window = tk.Toplevel(exercise_frame.winfo_toplevel())
+    exercise_window.attributes('-fullscreen', True)
+    
+    # Initialize ExerciseUI in the new window
+    ui = ExerciseUI(exercise_window, title="Elbow Up Down")
+    exercise = ElbowUpDown.ExerciseApp(ui)
+    ui.set_callbacks(exercise.start_exercise, exercise.stop_exercise)
+    exercise.start_exercise()
 def start_Arm_Extension_Camera():
-    def run():
-        Arm_Extension.run_exercise(exercise_status)
-        if exercise_status["Arm Extension"]:
-            update_button_state()
-    threading.Thread(target=run).start()
+    x=0
 
 def start_wallWalk_leftHand_Camera():
     def run():
@@ -82,42 +95,42 @@ def start_Standing_Leg_Front_Lift():
 
 def start_Single_Leg_Squat():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        Single_Leg_Squat.run_exercise(exercise_status)
         if exercise_status["Single Leg Squat"]:
             update_button_state()
     threading.Thread(target=run).start()
 
 def start_SideLegRaise_camera():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        SideLegRaise.run_exercise(exercise_status)
         if exercise_status["Side Leg Raise"]:
             update_button_state()
     threading.Thread(target=run).start()
 
 def start_Side_Box_Step_Ups():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        Side_Box_Step_Ups.run_exercise(exercise_status)
         if exercise_status["Side Box Step Ups"]:
             update_button_state()
     threading.Thread(target=run).start()
 
 def start_Front_Box_Step_Ups():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        Front_Box_Step_Ups.run_exercise(exercise_status)
         if exercise_status["Front Box Step Ups"]:
             update_button_state()
     threading.Thread(target=run).start()
 
 def start_Step_Reaction_Training():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        Step_Reaction_Training.run_exercise(exercise_status)
         if exercise_status["Step Reaction Training"]:
             update_button_state()
     threading.Thread(target=run).start()
 
 def start_calf():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        calf.run_exercise(exercise_status)
         if exercise_status["Calf Stretch"]:
             update_button_state()
     threading.Thread(target=run).start()
@@ -127,21 +140,21 @@ def start_calf():
 
 def start_Hamstring_Stretch():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        Hamstring_Stretch.run_exercise(exercise_status)
         if exercise_status["Hamstring Stretch"]:
             update_button_state()
     threading.Thread(target=run).start()
 
 def start_Partial_Wall_Squat():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        Partial_Wall_Squat.run_exercise(exercise_status)
         if exercise_status["Partial Wall Squat"]:
             update_button_state()
     threading.Thread(target=run).start()
 
 def start_Seated_Knee_Extension():
     def run():
-        Standing_LeftLeg_Front_Lift.run_exercise(exercise_status)
+        Seated_Knee_Extension.run_exercise(exercise_status)
         if exercise_status["Seated Knee Extension"]:
             update_button_state()
     threading.Thread(target=run).start()
@@ -152,7 +165,7 @@ def update_button_state():
         btn_leg_raise["state"]="disabled"
 
 
-def show_instructional_video(window, exercise_name):
+"""def show_instructional_video(window, start_function):
     def play_video(video_path):
         if not os.path.exists(video_path):
             print(f"Error: Video file not found at {video_path}")
@@ -170,62 +183,16 @@ def show_instructional_video(window, exercise_name):
         # Play the video
         player.play()
 
-        # Store the player object globally to control playback
-        nonlocal vlc_player
-        vlc_player = player
-
-        # Wait until the video finishes
-        def check_playback():
-            if player.get_state() == vlc.State.Ended:
-                start_button["state"] = "normal"  # Enable Start button
-            else:
-                window.after(100, check_playback)
-        check_playback()
-
-    def stop_video_and_go_back():
-        if vlc_player is not None:
-            vlc_player.stop()  # Stop the video
-        open_injury_page(window, "Knee Injuries")  # Navigate back to injury page
-
-
     # Clear the current window
     for widget in window.winfo_children():
         widget.destroy()
 
-    # Instruction Label
-    video_label = tk.Label(window, text="Watch the instructional video", font=("Arial", 16), bg="#C5EBE8", fg="#008878")
-    video_label.pack(pady=10)
-
     # Video Canvas
-    video_canvas = tk.Canvas(window, width=640, height=360, bg="black")
-    video_canvas.pack(pady=10)
+    video_canvas = tk.Canvas(window, width=900, height=500, bg="black", highlightthickness=0)
+    video_canvas.pack()
 
-    # Start Button (disabled initially)
-    start_button = tk.Button(
-        window,
-        text="Start Exercise",
-        command=exercise_name,
-        font=("Arial", 14),
-        bg="#008878",
-        fg="white",
-        state="disabled"
-    )
-    start_button.pack(pady=10)
-
-    # Back Button
-    btn_back = tk.Button(
-        window,
-        text="Back",
-        command= stop_video_and_go_back, 
-        font=("Arial", 14),
-        bg="#008878",
-        fg="white"
-    )
-    btn_back.pack(pady=10)
-
-    vlc_player=None
-    # Play Video
-    play_video(video_path)
+    # Start playing the video
+    play_video(video_path)"""
 
 
 # Function to clear the current window and show the main page again
@@ -309,8 +276,8 @@ def open_injury_page(window, injury_type):
     # Based on the injury type, show the corresponding exercises
     if injury_type == "Arm Injuries":
         exercises = [
-            ("Elbow Up Down", start_ElbowUpDown_Camera),
-            ("Arm Extension", start_Arm_Extension_Camera),
+            ("Elbow Up Down", lambda: show_instructional_video(window, lambda: start_ElbowUpDown_Camera(window))),
+            ("Arm Extension", lambda: window.after(10, start_Arm_Extension_Camera)),
             ("Wall Walk Left Hand", start_wallWalk_leftHand_Camera)
         ]
     else:
@@ -360,12 +327,7 @@ def open_injury_page(window, injury_type):
 # Main Window
 def main():
     # Create the main application window
-    root = tk.Tk()
-    root.title("Pose Detection Main Menu")
-    root.geometry("1920x1080")
-
-    # Set the background color
-    root.configure(bg="#C5EBE8")
+    root = create_fullscreen_window()
 
     # Show the main page
     show_main_page(root)

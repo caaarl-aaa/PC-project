@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Date Picker</title>
+
+    <!-- Include Vue.js -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+
+    <!-- Vue Functional Calendar -->
+    <script src="https://unpkg.com/vue-functional-calendar@latest/dist/vue-functional-calendar.umd.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vue-functional-calendar@latest/dist/vue-functional-calendar.css">
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f4f4f4;
+        }
+        #app {
+            margin: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <functional-calendar 
+            v-model="selectedDate" 
+            is-double-pick
+            :is-range="isRange"
+            :is-multiple="isMultiple"
+            :is-date="isSingle"
+            @change="sendDateToPython"
+        ></functional-calendar>
+        
+        <br><br>
+        <button @click="setMode('single')">Single Date</button>
+        <button @click="setMode('multiple')">Multiple Dates</button>
+        <button @click="setMode('range')">Date Range</button>
+        
+        <p><strong>Selected Date(s):</strong> {{ selectedDate }}</p>
+    </div>
+
+    <script>
+        new Vue({
+            el: "#app",
+            components: {
+                FunctionalCalendar: window["vue-functional-calendar"]
+            },
+            data() {
+                return {
+                    selectedDate: null,
+                    isSingle: true,
+                    isMultiple: false,
+                    isRange: false
+                };
+            },
+            methods: {
+                setMode(mode) {
+                    this.isSingle = (mode === "single");
+                    this.isMultiple = (mode === "multiple");
+                    this.isRange = (mode === "range");
+                    this.selectedDate = null; // Reset selection
+                },
+                sendDateToPython() {
+                    window.location.href = "callback://" + encodeURIComponent(JSON.stringify(this.selectedDate));
+                }
+            }
+        });
+    </script>
+</body>
+</html>

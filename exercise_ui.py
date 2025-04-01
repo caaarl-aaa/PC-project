@@ -1,6 +1,7 @@
 import cv2
 import tkinter as tk
 from tkinter import Button, Label, ttk
+from PIL import Image, ImageTk
 
 class ExerciseUI:
     def __init__(self, root, title="Exercise App"):
@@ -12,11 +13,14 @@ class ExerciseUI:
         # Get screen width and height
         self.screen_width = self.root.winfo_screenwidth()
         self.screen_height = self.root.winfo_screenheight()
-
+        print("Screen size (from screen):", self.screen_width, self.screen_height)
+        video_width = int(self.screen_width)  # e.g., 60% of the screen width
+        video_height = int(self.screen_height)
+        x_position = (self.screen_width - video_width) // 2
+        y_position = 0
         # Video display label
         self.video_label = Label(self.root)
-        self.video_label.place(x=0, y=0, width=self.screen_width, height=int(self.screen_height * 0.6))
-
+        self.video_label.place(x=x_position, y=y_position, width=video_width, height=video_height)
         # Exercise description text
         self.exercise_text = (
             "Sit or stand with your back straight. "
@@ -26,7 +30,7 @@ class ExerciseUI:
         )
 
         # Make background square bigger
-        label_width = int(self.screen_width * 0.6)  # 60% of screen width
+        label_width = int(self.screen_width * 0.4)  # 60% of screen width
         label_height = int(self.screen_height * 0.2)  # 30% of screen height (bigger)
         label_x = (self.screen_width - label_width) // 2
         label_y = int(self.screen_height * 0.65)  # Positioned below video area
@@ -56,7 +60,14 @@ class ExerciseUI:
         # Placeholder functions
         self.start_exercise_callback = None
         self.stop_exercise_callback = None
-
+    def update_video_frame(self, img):
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = cv2.resize(img, (self.screen_width, int(self.screen_height * 0.6)))
+        img = Image.fromarray(img)
+        img_tk = ImageTk.PhotoImage(image=img)
+        self.video_label.config(image=img_tk)
+        self.video_label.image = img_tk  # Avoid garbage collection
+        self.root.update()
     def create_button(self, text, x, y, command):
         """ Helper function to create buttons with hover effect """
         button = Button(self.root, text=text, command=command,
@@ -75,10 +86,10 @@ class ExerciseUI:
         """ Set callback functions for buttons """
         self.start_exercise_callback = start_callback
         self.stop_exercise_callback = stop_callback
-
+        self.start_button.config(command=self.start_exercise)
+        self.stop_button.config(command=self.stop_exercise)
     def start_exercise(self):
         """ Hide description and start exercise """
-        self.exercise_label.place_forget()  # Hide the label
         if self.start_exercise_callback:
             self.start_exercise_callback()
 
@@ -87,14 +98,8 @@ class ExerciseUI:
             self.stop_exercise_callback()
 
     def quit_app(self):
-        self.root.quit()
-
-    def update_video_frame(self, img):
-        """ Update the video frame in the UI """
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img = cv2.resize(img, (self.screen_width, int(self.screen_height * 0.6)))
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        photo = tk.PhotoImage(data=cv2.imencode('.png', img)[1].tobytes())
-        self.video_label.config(image=photo)
-        self.video_label.image = photo
-        self.root.update() 
+        print("Finish button clicked")
+        if self.stop_exercise_callback:
+            self.stop_exercise_callback()
+        print("Camera should be released now")
+        self.root.destroy()

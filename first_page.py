@@ -2,6 +2,7 @@ import customtkinter as ctk
 import random
 from PIL import Image, ImageTk
 
+
 def open_second_page():
     import second_page_login
     for widget in app.winfo_children():

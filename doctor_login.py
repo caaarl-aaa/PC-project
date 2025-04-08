@@ -20,7 +20,7 @@ def preload_images():
             image = Image.open(data["path"]).resize(data["size"], Image.LANCZOS)
             loaded_images[key] = ImageTk.PhotoImage(image)
         except Exception as e:
-            print(f"Error loading {data["path"]}: {e}")
+            print(f"Error loading {data['path']}: {e}")
 
 
 preload_images()

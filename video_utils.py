@@ -29,5 +29,5 @@ def show_instructional_video(window, start_function):
     video_canvas.pack()
 
     # Start playing the video
-    video_path = r"C:\Users\Carl\Desktop\pose-estim\pose-estimation\poseVideos\tutorial.mp4"
+    video_path = os.path.join("poseVideos", "tutorial.mp4")
     play_video(video_path)

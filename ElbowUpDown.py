@@ -174,7 +174,7 @@ class ExerciseApp:
                             stage = "up"
                             counter += 1
                             beep_sound.play()
-                            if counter % 5 == 0 and counter != 0:  # Every 5 counts, increase reps
+                            if counter % 3 == 0 and counter != 0: # Every 5 counts, increase reps
                                 reps += 1
                                 counter = 0
                                 success_sound.play()

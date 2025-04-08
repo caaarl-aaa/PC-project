@@ -16,10 +16,10 @@ def preload_images():
 
     for key, data in image_data.items():
         try:
-            image = Image.open(data["path"]).resize(data["size"], Image.LANCZOS)
+            image = Image.open(data['path']).resize(data['size'], Image.LANCZOS)
             loaded_images[key] = ImageTk.PhotoImage(image)
         except Exception as e:
-            print(f"Error loading {data["path"]}: {e}")
+            print(f"Error loading {data['path']}: {e}")
 
 
 preload_images()
@@ -113,7 +113,7 @@ def create_login_page(app):
         patients = patients_ref.stream()
         
         for patient in patients:
-            print(f"ID: {patient.get("id")}")
+            print(f"ID: {patient.get('id')}")
             return patient.get("id")  # Firestore Document ID
             
         return None

@@ -606,7 +606,7 @@ def create_doctor_page(app,current_user):
             "weight": get_valid_text(weight, "Weight (kg)"),
             "height": get_valid_text(height, "Height (cm)"),
             "doctor_id": doctor_id,
-            "name":f"{get_valid_text(first_name, "First Name")} {get_valid_text(last_name, "Last Name")}",
+            "name":f"{get_valid_text(first_name, 'First Name')} {get_valid_text(last_name, 'Last Name')}",
             "age": calculate_age(year.get(), month_num, day),
             "status":"In Progress"
         }

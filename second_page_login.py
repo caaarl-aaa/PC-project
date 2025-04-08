@@ -94,7 +94,7 @@ def create_login_page(app):
     # Tagline at the bottom
     tagline_label = ctk.CTkLabel(app, text="An Intelligent Physiotherapy and Recovery App\nfor Personalized and Remote Care",
                                 font=("Georgia", 20), text_color="black", justify="center", bg_color="#E0E0D7")
-    tagline_label.place(x=15, y=650)
+    tagline_label.place(x=15, y=app.winfo_screenheight()-250)
 
 
 
@@ -114,7 +114,7 @@ def create_login_page(app):
         
         for patient in patients:
             print(f"ID: {patient.get('id')}")
-            return patient.get("id")  # Firestore Document ID
+            return patient.get('id')  # Firestore Document ID
             
         return None
 
@@ -130,7 +130,7 @@ def create_login_page(app):
              # Fetch patient ID based on user
             patient_id=get_patient_id(username)
             if patient_id:
-                current_user["patient_id"]=patient_id
+                current_user['patient_id']=patient_id
             #print("Logged-in Patient:", current_user)
             open_third_page(current_user)
 

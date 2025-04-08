@@ -30,9 +30,9 @@ def create_third_page(app,current_user):
 
         for ex in exercises:
             ex_data=ex.to_dict()
-            if "date" in ex_data and ex_data["date"]==selected_date:
-                exercises_list.append((ex_data["exercise_name"],ex_data["sets"],ex_data["reps"], ex_data["degrees_from"], ex_data["degrees_to"]))
-            elif "dates" in ex_data and selected_date in ex_data["dates"]:
+            if "date" in ex_data and ex_data['date']==selected_date:
+                exercises_list.append((ex_data['exercise_name'],ex_data['sets'],ex_data['reps'], ex_data['degrees_from'], ex_data['degrees_to']))
+            elif "dates" in ex_data and selected_date in ex_data['dates']:
                 exercises_list.append((ex_data["exercise_name"],ex_data["sets"],ex_data["reps"], ex_data["degrees_from"], ex_data["degrees_to"]))
             elif "date_start" in ex_data and "date_end" in ex_data:
                 if ex_data["date_start"]<=selected_date<=ex_data["date_end"]:
@@ -215,11 +215,11 @@ def create_third_page(app,current_user):
     # Create Frames (Pages)
     for page_name in ["Dashboard", "My Session", "My Progress", "Notifications", "Contact"]:
         if page_name=="Notifications":
-            frame = ctk.CTkFrame(content, fg_color="white", width=1500, height=1100)
+            frame = ctk.CTkFrame(content, fg_color="white", width=app.winfo_screenwidth(), height=1100)
             frame.grid(row=0, column=0, sticky="nsew")
             pages[page_name] = frame
         else:
-            frame = ctk.CTkFrame(content, fg_color="#CCDEE0", width=1500, height=1100)
+            frame = ctk.CTkFrame(content, fg_color="#CCDEE0", width=app.winfo_screenwidth(), height=1100)
             frame.grid(row=0, column=0, sticky="nsew")
             pages[page_name] = frame
 
@@ -256,13 +256,13 @@ def create_third_page(app,current_user):
     #  ✨✨**DASHBOARD PAGE**✨✨
     stars_icon=ctk.CTkImage(light_image=Image.open("assets_gui/stars.png"), size=(100, 100))
     dashboard_label = ctk.CTkLabel(pages["Dashboard"],width=500,height=105,corner_radius=20, text="Doing Great,\nKeep it up!      ",image=stars_icon,compound="right", font=("Garamond", 43, "bold"),text_color="#D9D9D9", fg_color="#0B2B32", bg_color="#CCDEE0")
-    dashboard_label.place(x=730, y=20)
+    dashboard_label.place(x=app.winfo_screenwidth()-800, y=20)
 
     profile_canvas = ctk.CTkCanvas(pages["Dashboard"], width=500, height=740, bg="#CCDEE0", bd=0, highlightthickness=0)
     profile_canvas.place(x=100, y=0)
     profile_frame = ctk.CTkFrame(profile_canvas, width=310,height=120,fg_color="white",bg_color="white")
     profile_frame.pack_propagate(False)
-    profile_frame.place(x=25,y=105)
+    profile_frame.place(x=50,y=150)
     
 
     wbox_image = Image.open("assets_gui/white_box.png").resize((400, 275), Image.LANCZOS)
@@ -289,11 +289,11 @@ def create_third_page(app,current_user):
     injury_value.grid(row=1, column=1, padx=(30,60),pady=(0,20))
 
     notifeed_label = ctk.CTkLabel(pages["Dashboard"],text="Notifications | Feedback", text_color="#1C5F64",fg_color="transparent",font=("Georgia", 25))
-    notifeed_label.place(x=100,y=330)
+    notifeed_label.place(x=120,y=370)
     date_label = ctk.CTkLabel(pages["Dashboard"],text=f"{todayy}", text_color="#3D5051",fg_color="transparent",font=("Georgia", 18))
-    date_label.place(x=230,y=370)
+    date_label.place(x=250,y=410)
     scroll_frame = ctk.CTkScrollableFrame(pages["Dashboard"], width=280, height=300, fg_color="white", corner_radius=20)
-    scroll_frame.place(x=100, y=410)
+    scroll_frame.place(x=120, y=450)
     for date, messages in today_notifications.items():
         for message_type, message_text in messages:  # Loop over tuples inside the list
             frame = ctk.CTkFrame(scroll_frame, fg_color="white", corner_radius=5)
@@ -306,7 +306,7 @@ def create_third_page(app,current_user):
             message_label.pack(anchor="w", padx=10, pady=(0, 5))
 
     exscroll_frame = ctk.CTkScrollableFrame(pages["Dashboard"], width=600, height=500, fg_color="white", corner_radius=20)
-    exscroll_frame.place(x=600, y=150)
+    exscroll_frame.place(x=app.winfo_screenwidth()-930, y=150)
     today_label = ctk.CTkLabel(exscroll_frame, text="Today's Session", font=("Garamond", 37, "bold"))
     today_label.grid(row=0, column=0, padx=(30,0))
     see_label = ctk.CTkLabel(exscroll_frame, text="See My Session", font=("Georgia", 17,"underline"),text_color="#3D5051", cursor="hand2")
@@ -433,12 +433,12 @@ def create_third_page(app,current_user):
 
     scrollable_frame = ctk.CTkScrollableFrame(
     ncanvas,
-    width=900,
-    height=585,
+    width=(app.winfo_screenwidth()/2)+145,
+    height=(app.winfo_screenheight()/2)+145,
     fg_color="#7F9B9E",
     bg_color="#7F9B9E"  # This lets the scrollable frame blend with its parent
 )
-    scrollable_frame.place(x=220, y=140)
+    scrollable_frame.place(x=app.winfo_screenwidth()/7, y=150)
     
     for date,messages in notifications.items():
         date_label = ctk.CTkLabel(scrollable_frame, text=date, font=("Georgia", 16, "bold"), text_color="#3D5051")

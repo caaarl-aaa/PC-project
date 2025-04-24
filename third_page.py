@@ -23,6 +23,15 @@ def create_third_page(app,current_user):
 
     notifications="No Notifications to show"
     patient_id = current_user.get("patient_id")
+    def fetch_next_appointment(patient_id):
+        appointments_ref = db.collection("appointments").where("patient_id", "==", patient_id).where("status", "in", ["Pending", "Approved"]).order_by("date").order_by("time").limit(1)
+
+        appointments = appointments_ref.stream()
+        for appointment in appointments:
+            return appointment.to_dict()
+        return None
+
+
     def fetch_exercises(patient_id, selected_date):
         exercises_list=[]
         exercises_ref=db.collection("exercises").where("patient_id","==", patient_id)
@@ -42,48 +51,6 @@ def create_third_page(app,current_user):
     
     exercise_list=fetch_exercises(patient_id, today_date)
 
-    def fetch_notifications(patient_id):
-        notifications_ref = db.collection("notifications").where("patient_id", "==", patient_id)
-        notifications = notifications_ref.stream()
-
-        # Group notifications by date
-        notifications_dict = {}
-
-        for n in notifications:
-            doc_data = n.to_dict()
-            date = doc_data.get("date", "Unknown Date")  # Ensure a date exists
-            message_type = doc_data.get("type", "General")
-            message = doc_data.get("message", "No message available")
-
-            if date not in notifications_dict:
-                notifications_dict[date] = []
-
-            notifications_dict[date].append((message_type, message))
-
-        return notifications_dict  # Return grouped dictionary
-
-    notifications = fetch_notifications(patient_id)
-
-    def fetch_today_notifications(patient_id):
-        notifications_ref = db.collection("notifications").where("patient_id", "==", patient_id).where("date","==", today_date)
-        notifications = notifications_ref.stream()
-
-        # Group notifications by date
-        notifications_dict = {}
-
-        for n in notifications:
-            doc_data = n.to_dict()
-            date = doc_data.get("date", "Unknown Date")  # Ensure a date exists
-            message_type = doc_data.get("type", "General")
-            message = doc_data.get("message", "No message available")
-
-            if date not in notifications_dict:
-                notifications_dict[date] = []
-
-            notifications_dict[date].append((message_type, message))
-
-        return notifications_dict 
-    today_notifications=fetch_today_notifications(patient_id)
 
     def fetch_doctor_id(patient_id):
         patient_ref = db.collection("patients").where("id", "==", patient_id)
@@ -93,6 +60,58 @@ def create_third_page(app,current_user):
             doctor_id = patient_data.get("doctor_id")
         return doctor_id  # Get doctor_id field
     doctor_id = fetch_doctor_id(patient_id)
+
+    def fetch_all_messages(patient_id, doctor_id):
+        chat_id = f"{doctor_id}_{patient_id}"
+        chat_ref = db.collection("chats").document(chat_id)
+        doc = chat_ref.get()
+
+        messages_dict = {}
+
+        if doc.exists:
+            chat_data = doc.to_dict()
+            messages = chat_data.get("messages", [])
+            messages.sort(key=lambda x: x.get("timestamp", ""), reverse=True)  # Sort by time
+
+            for msg in messages:
+                timestamp = msg.get("timestamp")
+                if isinstance(timestamp, datetime):
+                    date_str = timestamp.strftime("%Y-%m-%d")
+                    msg_type = "Message"
+                    msg_text = msg.get("text", "No content")
+                    if date_str not in messages_dict:
+                        messages_dict[date_str] = []
+                    messages_dict[date_str].append((msg_type, msg_text))
+
+        return messages_dict
+
+    notifications = fetch_all_messages(patient_id, doctor_id)
+
+    def fetch_today_messages(patient_id, doctor_id):
+        chat_id = f"{doctor_id}_{patient_id}"
+        chat_ref = db.collection("chats").document(chat_id)
+        doc = chat_ref.get()
+
+        today_str = datetime.today().strftime("%Y-%m-%d")
+        messages_dict = {}
+
+        if doc.exists:
+            chat_data = doc.to_dict()
+            messages = chat_data.get("messages", [])
+            messages.sort(key=lambda x: x.get("timestamp", ""))  # Sort by time
+
+            for msg in messages:
+                timestamp = msg.get("timestamp")
+                if isinstance(timestamp, datetime) and timestamp.strftime("%Y-%m-%d") == today_str:
+                    msg_type = "Message"
+                    msg_text = msg.get("text", "No content")
+                    if today_str not in messages_dict:
+                        messages_dict[today_str] = []
+                    messages_dict[today_str].append((msg_type, msg_text))
+
+        return messages_dict
+
+    today_notifications=fetch_today_messages(patient_id, doctor_id)
 
     
     def fetch_doctor_details(doctor_id): 
@@ -215,11 +234,11 @@ def create_third_page(app,current_user):
     # Create Frames (Pages)
     for page_name in ["Dashboard", "My Session", "My Progress", "Notifications", "Contact"]:
         if page_name=="Notifications":
-            frame = ctk.CTkFrame(content, fg_color="white", width=1500, height=1100)
+            frame = ctk.CTkFrame(content, fg_color="white", width=app.winfo_screenwidth(), height=1100)
             frame.grid(row=0, column=0, sticky="nsew")
             pages[page_name] = frame
         else:
-            frame = ctk.CTkFrame(content, fg_color="#CCDEE0", width=1500, height=1100)
+            frame = ctk.CTkFrame(content, fg_color="#CCDEE0", width=app.winfo_screenwidth(), height=1100)
             frame.grid(row=0, column=0, sticky="nsew")
             pages[page_name] = frame
 
@@ -256,7 +275,7 @@ def create_third_page(app,current_user):
     #  ✨✨**DASHBOARD PAGE**✨✨
     stars_icon=ctk.CTkImage(light_image=Image.open("assets_gui/stars.png"), size=(100, 100))
     dashboard_label = ctk.CTkLabel(pages["Dashboard"],width=500,height=105,corner_radius=20, text="Doing Great,\nKeep it up!      ",image=stars_icon,compound="right", font=("Garamond", 43, "bold"),text_color="#D9D9D9", fg_color="#0B2B32", bg_color="#CCDEE0")
-    dashboard_label.place(x=730, y=20)
+    dashboard_label.place(x=app.winfo_screenwidth()-800, y=20)
 
     profile_canvas = ctk.CTkCanvas(pages["Dashboard"], width=500, height=740, bg="#CCDEE0", bd=0, highlightthickness=0)
     profile_canvas.place(x=100, y=0)
@@ -289,11 +308,24 @@ def create_third_page(app,current_user):
     injury_value.grid(row=1, column=1, padx=(30,60),pady=(0,20))
 
     notifeed_label = ctk.CTkLabel(pages["Dashboard"],text="Notifications | Feedback", text_color="#1C5F64",fg_color="transparent",font=("Georgia", 25))
-    notifeed_label.place(x=100,y=330)
+    notifeed_label.place(x=120,y=370)
     date_label = ctk.CTkLabel(pages["Dashboard"],text=f"{todayy}", text_color="#3D5051",fg_color="transparent",font=("Georgia", 18))
-    date_label.place(x=230,y=370)
+    date_label.place(x=250,y=410)
     scroll_frame = ctk.CTkScrollableFrame(pages["Dashboard"], width=280, height=300, fg_color="white", corner_radius=20)
-    scroll_frame.place(x=100, y=410)
+    scroll_frame.place(x=120, y=450)
+    next_appointment = fetch_next_appointment(patient_id)
+
+    if next_appointment:
+        appt_frame = ctk.CTkFrame(scroll_frame, fg_color="#E5F6F8", corner_radius=10)
+        appt_frame.pack(fill="x", pady=(5, 10), padx=5)
+
+        appt_title = ctk.CTkLabel(appt_frame, text="Next Appointment", font=("Georgia", 18, "bold"), text_color="#093D4A")
+        appt_title.pack(anchor="w", padx=10, pady=(5, 0))
+
+        appt_info = f"{next_appointment.get('date', 'Date N/A')} at {next_appointment.get('time', 'Time N/A')}\nStatus: {next_appointment.get('status', 'N/A')}"
+        appt_label = ctk.CTkLabel(appt_frame, text=appt_info, font=("Georgia", 16), text_color="#3D5051", wraplength=250, justify="left")
+        appt_label.pack(anchor="w", padx=10, pady=(0, 5))
+
     for date, messages in today_notifications.items():
         for message_type, message_text in messages:  # Loop over tuples inside the list
             frame = ctk.CTkFrame(scroll_frame, fg_color="white", corner_radius=5)
@@ -306,7 +338,7 @@ def create_third_page(app,current_user):
             message_label.pack(anchor="w", padx=10, pady=(0, 5))
 
     exscroll_frame = ctk.CTkScrollableFrame(pages["Dashboard"], width=600, height=500, fg_color="white", corner_radius=20)
-    exscroll_frame.place(x=600, y=150)
+    exscroll_frame.place(x=app.winfo_screenwidth()-950, y=150)
     today_label = ctk.CTkLabel(exscroll_frame, text="Today's Session", font=("Garamond", 37, "bold"))
     today_label.grid(row=0, column=0, padx=(30,0))
     see_label = ctk.CTkLabel(exscroll_frame, text="See My Session", font=("Georgia", 17,"underline"),text_color="#3D5051", cursor="hand2")
@@ -325,7 +357,7 @@ def create_third_page(app,current_user):
 
         ex, sets, reps = selected_exercise
         exercise_function_mapping = {
-            "Elbow Up Down": main.start_ElbowUpDown_Camera,
+            "Elbow Up Down": lambda frame: main.start_ElbowUpDown_Camera(frame, current_user),
             "Arm Extension": main.start_Arm_Extension_Camera,
             "Wall Walk Left Hand": main.start_wallWalk_leftHand_Camera,
             "Standing Leg Front Lift": main.start_Standing_Leg_Front_Lift,
@@ -433,12 +465,12 @@ def create_third_page(app,current_user):
 
     scrollable_frame = ctk.CTkScrollableFrame(
     ncanvas,
-    width=900,
-    height=585,
+    width=(app.winfo_screenwidth()/2)+145,
+    height=(app.winfo_screenheight()/2)+145,
     fg_color="#7F9B9E",
     bg_color="#7F9B9E"  # This lets the scrollable frame blend with its parent
 )
-    scrollable_frame.place(x=220, y=140)
+    scrollable_frame.place(x=app.winfo_screenwidth()/7, y=140)
     
     for date,messages in notifications.items():
         date_label = ctk.CTkLabel(scrollable_frame, text=date, font=("Georgia", 16, "bold"), text_color="#3D5051")

@@ -5,9 +5,13 @@ import tkinter as tk
 import tkinter.messagebox as messagebox
 from tkcalendar import Calendar
 from firebase_config import db
-import threading
+import matplotlib.pyplot as plt
+import io
+from collections import defaultdict
 from google.cloud import firestore
+import tzlocal
 
+local_tz=tzlocal.get_localzone()
 sidebar_buttons={}
 selected_dates = [] 
 start_date=None
@@ -16,6 +20,7 @@ current_year=datetime.today().year
 current_month=datetime.today().month
 current_day=datetime.today().day
 def create_doctor_page(app,current_user):
+    
     doctor_id=current_user.get("doctor_id")
     def fetch_patients(doctor_id, status_filter=None):
         patients_ref=db.collection("patients").where("doctor_id","==", doctor_id)
@@ -71,7 +76,8 @@ def create_doctor_page(app,current_user):
             chat_ref.set({
                 "doctor_id": doctor_id,
                 "patient_id": patient_id,
-                "created_at": datetime.utcnow()  # Store timestamp of chat creation
+                "created_at": datetime.now(tzlocal.get_localzone())
+  # Store timestamp of chat creation
             })
             print(f"Chat room created for {doctor_id} and {patient_id}")
         else:
@@ -86,7 +92,7 @@ def create_doctor_page(app,current_user):
         message = {
             "sender_id": sender_id,
             "text": text,
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.now(tzlocal.get_localzone())
         }
 
         chat_ref.update({
@@ -108,7 +114,9 @@ def create_doctor_page(app,current_user):
                 if doc.exists:
                     chat_data = doc.to_dict()
                     messages = chat_data.get("messages", [])  # Get all messages
-                    messages.sort(key=lambda x: x.get("timestamp", ""))  # Sort messages by timestamp
+                    messages.sort(
+                        key=lambda x: x.get("timestamp") or datetime.min.replace(tzinfo=local_tz)
+                    )
                     callback(messages) 
         chat_ref.on_snapshot(on_snapshot)
     
@@ -117,6 +125,13 @@ def create_doctor_page(app,current_user):
     
     main_frame = ctk.CTkFrame(app, width=app.winfo_screenwidth(), height=app.winfo_screenheight(), fg_color="#CCDEE0")
     main_frame.place(x=0, y=0)
+    def go_back_to_login():
+        from second_page_login import create_login_page
+        create_login_page(app)
+
+    logout_button = ctk.CTkButton(app, text="Logout", font=("Arial", 23, "bold"), fg_color="#275057", bg_color="#CCDEE0",
+                             text_color="white", corner_radius=20, width=150, height=50, command=go_back_to_login)
+    logout_button.place(x=app.winfo_screenwidth()-200, y=app.winfo_screenheight()-135)
 
     # Sidebar Frame
     sidebar = ctk.CTkFrame(main_frame, width=180, fg_color="#CBE4E4", bg_color="#CBE4E4")
@@ -147,10 +162,13 @@ def create_doctor_page(app,current_user):
                 btn.configure(fg_color="#93C0C2")  # Selected button
             else:
                 btn.configure(fg_color="#CBE4E4")  # Not selected
+        
         pages[page_name].tkraise()
 
         if page_name=="Add Patient":
             reset_form()
+        elif page_name=="Appointments":
+            setup_appointments_page()
 
     # Sidebar Buttons with Icons
     patients_icon=ctk.CTkImage(light_image=Image.open("assets_gui/patients.png"), size=(40,40))
@@ -246,10 +264,233 @@ def create_doctor_page(app,current_user):
         for widget in pages["Specific Patient"].winfo_children():
             widget.destroy()
         
+        def fetch_weekly_performance(patient_id):
+            print(f"Fetching weekly performance patient:{patient_id}")
+            reports_ref = db.collection("performance_reports").where("patient_id", "==", patient_id)
+            reports = reports_ref.stream()
+
+            weekly_summary = {}
+
+            for report in reports:
+                data = report.to_dict()
+                timestamp = data.get("timestamp")
+
+                if isinstance(timestamp, datetime):
+                    year, week_num, _ = timestamp.isocalendar()
+                    week_start = datetime.strptime(f"{year}-W{week_num}-1", "%G-W%V-%u").date()
+                    week_end = week_start + timedelta(days=6)
+                    week_key = f"{year}-W{week_num} ({week_start.strftime('%b %d')} – {week_end.strftime('%b %d')})"
+
+                    if week_key not in weekly_summary:
+                        weekly_summary[week_key] = {
+                            "total_sessions": 0,
+                            "total_reps": 0,
+                            "total_movements": 0,
+                            "total_duration": 0.0,
+                            "warnings": [],
+                            "sessions": [],
+                            "sort_key": (year, week_num),
+                            "exercise_details": {}  # <- Initialize exercise map
+                        }
+
+                    week_data = weekly_summary[week_key]
+                    week_data["total_sessions"] += 1
+                    week_data["total_reps"] += data.get("reps", 0)
+                    week_data["total_movements"] += data.get("movements", 0)
+                    week_data["total_duration"] += data.get("duration_seconds", 0)
+                    week_data["warnings"].extend(data.get("warnings", []))
+
+                    # Add session info
+                    week_data["sessions"].append({
+                        "reps": data.get("reps", 0),
+                        "movements": data.get("movements", 0),
+                        "duration": data.get("duration_seconds", 0),
+                        "pain_level": data.get("pain_level", "N/A"),
+                        "timestamp": timestamp.strftime("%Y-%m-%d %H:%M") if timestamp else "Unknown"
+                    })
+
+                    # 🔥 Add per-exercise aggregation
+                    exercise_name = data.get("exercise_name", "Unknown Exercise")
+                    exercise_map = week_data["exercise_details"]
+                    if exercise_name not in exercise_map:
+                        exercise_map[exercise_name] = {"reps": 0, "duration": 0.0, "warnings": 0}
+                    exercise_map[exercise_name]["reps"] += data.get("reps", 0)
+                    exercise_map[exercise_name]["duration"] += data.get("duration_seconds", 0)
+                    exercise_map[exercise_name]["warnings"] += len(data.get("warnings", []))
+
+                else:
+                    print("⚠️ Invalid timestamp format, skipping report")
+
+            # Sort weeks chronologically
+            sorted_week_items = sorted(weekly_summary.items(), key=lambda item: item[1]["sort_key"])
+            sorted_weeks = [item[0] for item in sorted_week_items]
+
+            # Compute deltas for reps and duration
+            for i in range(1, len(sorted_weeks)):
+                current_week = sorted_weeks[i]
+                previous_week = sorted_weeks[i - 1]
+
+                current = weekly_summary[current_week]
+                previous = weekly_summary[previous_week]
+
+                current["delta_reps"] = current["total_reps"] - previous["total_reps"]
+                current["delta_duration"] = round(current["total_duration"] - previous["total_duration"], 2)
+
+            if sorted_weeks:
+                weekly_summary[sorted_weeks[0]]["delta_reps"] = None
+                weekly_summary[sorted_weeks[0]]["delta_duration"] = None
+
+            return weekly_summary
+
+
+
+        def show_weekly_report_popup(week_key, data):
+
+            popup = ctk.CTkToplevel()
+            
+            popup.title(f"Weekly Report - {week_key}")
+            popup.geometry("550x500")
+            popup.grab_set()  # Prevent clicking outside
+
+            container=tk.Frame(popup, bg="white")
+
+            canvas = tk.Canvas(container, width=580, height=520, background="white")
+            scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
+            scrollable_frame = tk.Frame(canvas, background="white")
+
+            scrollable_frame.bind(
+                "<Configure>",
+                lambda e: canvas.configure(
+                    scrollregion=canvas.bbox("all")
+                )
+            )
+
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+
+            container.pack(fill="both", expand=True)
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+
+
+            ctk.CTkLabel(popup, text=f"📅 Weekly Report: {week_key}", font=("Garamond", 24, "bold")).pack(pady=10)
+
+            # Summary Info
+            summary_text = f"""Total Sessions: {data['total_sessions']}
+        Total Reps: {data['total_reps']}
+        Total Movements: {data['total_movements']}
+        Total Duration: {int(data['total_duration']//60)} min {int(data['total_duration']%60)} sec
+        Warnings Count: {len(data['warnings'])}"""
+
+            if data.get("delta_reps") is not None:
+                summary_text += f"\n🔄 Reps Δ: {data['delta_reps']:+}"
+                summary_text += f"\n⏱️ Duration Δ: {int(data['delta_duration']//60)} min {int(data['delta_duration']%60)} sec"
+
+
+            summary_label = ctk.CTkLabel(scrollable_frame, text=summary_text, font=("Georgia", 16), justify="left", anchor="w")
+            summary_label.pack(padx=20, anchor="w")
+
+            if "exercise_details" in data and data["exercise_details"]:
+                exercise_details = data["exercise_details"]
+                sorted_week_items = sorted(weekly_data.items(), key=lambda item: item[1]["sort_key"])
+                all_weeks = [wk for wk, _ in sorted_week_items]
+
+                options = ["Overall"] + list(exercise_details.keys())
+                selected_option = tk.StringVar(value=options[0])
+
+                ctk.CTkLabel(scrollable_frame, text="📂 Graph Mode:", font=("Georgia", 15)).pack(pady=(5, 0))
+                dropdown = ctk.CTkComboBox(scrollable_frame, values=options, variable=selected_option, width=200)
+                dropdown.pack(pady=(0, 10))
+
+                chart_label_ex = tk.Label(scrollable_frame)
+                chart_label_ex.pack(pady=(5, 20))
+
+                def draw_chart():
+                    option = selected_option.get()
+                    sorted_items = sorted(weekly_data.items(), key=lambda item: item[1]["sort_key"])
+                    all_weeks = [wk for wk, _ in sorted_items]
+
+                    reps = []
+                    durations = []
+
+                    if option == "Overall":
+                        reps = [weekly_data[w]["total_reps"] for w in all_weeks]
+                        durations = [weekly_data[w]["total_duration"] / 60 for w in all_weeks]
+                    else:
+                        reps = [weekly_data[w]["exercise_details"].get(option, {}).get("reps", 0) for w in all_weeks]
+                        durations = [weekly_data[w]["exercise_details"].get(option, {}).get("duration", 0) / 60 for w in all_weeks]
+
+                    fig, axs = plt.subplots(1, 2, figsize=(15, 5))
+
+                    # --- Reps Bar Chart ---
+                    colors = []
+                    for i in range(len(reps)):
+                        if i == 0:
+                            colors.append('gray')
+                        else:
+                            colors.append('green' if reps[i] > reps[i - 1] else 'red')
+                    axs[0].bar(all_weeks, reps, color=colors)
+                    axs[0].set_title(f"{option} Reps Over Time")
+                    axs[0].tick_params(axis='x', rotation=45)
+
+                    # --- Duration Line Chart ---
+                    for i in range(1, len(durations)):
+                        color = 'green' if durations[i] > durations[i - 1] else 'red'
+                        axs[1].plot(all_weeks[i-1:i+1], durations[i-1:i+1], marker='o', color=color)
+                    axs[1].plot(all_weeks[0], durations[0], marker='o', color='gray')
+                    axs[1].set_title(f"{option} Duration Over Time (min)")
+                    axs[1].set_ylabel('Duration (min)')
+                    axs[1].tick_params(axis='x', rotation=45)
+
+                    fig.tight_layout()
+                    buf = io.BytesIO()
+                    plt.savefig(buf, format="png")
+                    buf.seek(0)
+                    img = Image.open(buf)
+                    tk_img = ImageTk.PhotoImage(img)
+                    chart_label_ex.configure(image=tk_img)
+                    chart_label_ex.image = tk_img
+
+                dropdown.bind("<<ComboboxSelected>>", lambda _: draw_chart())
+                draw_chart()
+
+            if data.get("sessions"):
+                ctk.CTkLabel(scrollable_frame, text="📋 Session Details:", font=("Georgia", 18, "bold")).pack(padx=20, anchor="w", pady=(15, 5))
+                session_box = ctk.CTkTextbox(scrollable_frame, height=160, width=500, font=("Georgia", 13))
+                session_box.pack(padx=20, pady=(5, 10), fill="both", expand=False)
+
+                header = f"{'Date':<20} {'Reps':<6} {'Moves':<8} {'Duration':<10} {'Pain'}\n"
+                session_box.insert("1.0", header)
+                session_box.insert("2.0", "-" * 60 + "\n")
+
+                for session in data["sessions"]:
+                    line = f"{session['timestamp']:<20} {session['reps']:<6} {session['movements']:<8} {int(session['duration']//60)}m {int(session['duration']%60)}s   {session['pain_level']}\n"
+                    session_box.insert("end", line)
+
+                session_box.configure(state="disabled")
+
+            # Warnings Section
+            if data["warnings"]:
+                ctk.CTkLabel(scrollable_frame, text="⚠️ Warnings:", font=("Georgia", 18, "bold"), text_color="red").pack(padx=20, anchor="w", pady=(10, 0))
+
+                warnings_box = ctk.CTkTextbox(scrollable_frame, height=100, width=480, font=("Georgia", 13), wrap="word")
+                warnings_box.pack(padx=20, pady=(5, 10), fill="both", expand=False)
+
+                warnings_box.insert("1.0", "\n".join(f"• {w}" for w in data["warnings"]))
+                warnings_box.configure(state="disabled")
+            else:
+                ctk.CTkLabel(scrollable_frame, text="✅ No warnings for this week!", font=("Georgia", 16), text_color="green").pack(padx=20, anchor="w", pady=20)
+
+
+            # Close Button
+            ctk.CTkButton(scrollable_frame, text="Close", command=popup.destroy, fg_color="#275057", font=("Georgia", 14)).pack(pady=10)
+
+        
         create_chat_room(doctor_id, patient_data[4])
 
         scanvas=ctk.CTkCanvas(pages["Specific Patient"], width=3500, height=1100,bg = "#CCDEE0",bd = 0,highlightthickness = 0,relief = "ridge")
-        scanvas.pack(fill="both", expand=True)
+        scanvas.place(x=0, y=0)
+
         specific_patient_info=fetch_specific_patients(patient_data[4])
         specific_exercises_info=fetch_specific_exercises(patient_data[4])
 
@@ -297,8 +538,10 @@ def create_doctor_page(app,current_user):
                 timestamp=msg.get('timestamp')
                 # Convert timestamp to readable format
                 if isinstance(timestamp, datetime):
+                    timestamp = timestamp.astimezone(local_tz)
                     msg_date = timestamp.strftime("%d %b %Y")
                     msg_time = timestamp.strftime("%I:%M %p")
+                    
                 else:
                     msg_date = "Unknown Date"
                     msg_time = "Unknown Time"
@@ -377,7 +620,7 @@ def create_doctor_page(app,current_user):
         details_frames = {}
 
         for section in ["Personal Information", "Treatments", "Medical Record"]:
-            frame = ctk.CTkFrame(scanvas, fg_color="#BADDE0", corner_radius=10, width=460, height=300)
+            frame = ctk.CTkScrollableFrame(scanvas, fg_color="#BADDE0", corner_radius=10, width=500, height=300)
             frame.place(x=50, y=220)
             frame.pack_propagate(False)
             details_frames[section] = frame
@@ -452,7 +695,7 @@ def create_doctor_page(app,current_user):
 
                 labels=["Name","Reps","Sets","Degr-","-Degr"]
                 for i in range(len(labels)):
-                    ctk.CTkLabel(frame, text=labels[i], font=("Georgia", 18, "bold"), text_color="black").grid(row=0, column=i, padx=20, pady=5)
+                    ctk.CTkLabel(frame, text=labels[i], font=("Georgia", 18, "bold"), text_color="black").grid(row=0, column=i, padx=10, pady=5)
                 
                 
                 for i, (name, reps,sets,from_,to_,ex_id) in enumerate(specific_exercises_info, start=1):
@@ -482,11 +725,11 @@ def create_doctor_page(app,current_user):
                 ctk.CTkLabel(frame, text="Plan", font=("Georgia", 18, "bold"), text_color="black").grid(row=0, column=0, padx=20, pady=5)
                 ctk.CTkLabel(frame, text="Report", font=("Georgia", 18, "bold"), text_color="black").grid(row=0, column=1, padx=20, pady=5)
 
-                weeks = ["Week 1", "Week 2", "Week 3", "Week 4"]
+                weekly_data = fetch_weekly_performance(patient_data[4])  # real weekly report data
 
-                for i, week in enumerate(weeks, start=1):
-                    ctk.CTkLabel(frame, text=week, font=("Georgia", 18), text_color="black").grid(row=i, column=0, padx=20, pady=5, sticky="w")
-                    ctk.CTkButton(frame, text="View", width=100).grid(row=i, column=1, padx=20, pady=5)
+                for i, (week_key, data) in enumerate(sorted(weekly_data.items()),start=1):
+                    ctk.CTkLabel(frame, text=week_key, font=("Georgia", 18), text_color="black").grid(row=i, column=0, padx=20, pady=5, sticky="w")
+                    ctk.CTkButton(frame, text="View", width=100, command= lambda wk=week_key, d=data:show_weekly_report_popup(wk,d)).grid(row=i, column=1, padx=20, pady=5)
 
             # Set default active tab
         switch_tab("Personal Information")
@@ -606,7 +849,7 @@ def create_doctor_page(app,current_user):
             "weight": get_valid_text(weight, "Weight (kg)"),
             "height": get_valid_text(height, "Height (cm)"),
             "doctor_id": doctor_id,
-            "name":f"{get_valid_text(first_name, 'First Name')} {get_valid_text(last_name, 'Last Name')}",
+            "name":f"{get_valid_text(first_name, "First Name")} {get_valid_text(last_name, "Last Name")}",
             "age": calculate_age(year.get(), month_num, day),
             "status":"In Progress"
         }
@@ -815,6 +1058,212 @@ def create_doctor_page(app,current_user):
         back_button.place(x=700,y=740)
 
         switch_page("Treatment")
+    
+
+    # ✨✨✨ APPOINTMENT PAGE✨✨✨
+
+    def setup_appointments_page():
+        page = pages["Appointments"]
+        for widget in page.winfo_children():
+            widget.destroy()
+
+        # === Header ===
+        ctk.CTkLabel(page, text="Appointments", font=("Garamond", 30, "bold"), text_color="black", bg_color="#BADDE0").pack(pady=20)
+
+        layout_frame = ctk.CTkFrame(page, fg_color="#BADDE0")
+        layout_frame.pack(pady=10)
+
+        # === Left: Create Appointment ===
+        create_frame = ctk.CTkFrame(layout_frame, fg_color="white", width=500)
+        create_frame.grid(row=0, column=0, padx=20, sticky="n")
+        ctk.CTkLabel(create_frame, text="Create Appointment", font=("Georgia", 20, "bold")).pack(pady=10)
+
+        # Patient ID
+        patient_id_entry = ctk.CTkEntry(create_frame, placeholder_text="Patient ID", width=300)
+        patient_id_entry.pack(pady=5)
+
+        # Patient Name
+        patient_name_entry = ctk.CTkEntry(create_frame, placeholder_text="Patient Name", width=300)
+        patient_name_entry.pack(pady=5)
+
+        # Date Picker (tkcalendar)
+        ctk.CTkLabel(create_frame, text="Select Date", font=("Georgia", 14)).pack(pady=(10, 0))
+        cal = Calendar(create_frame, selectmode="day", date_pattern="yyyy-mm-dd")
+        cal.pack(pady=5)
+
+        # Time Selection
+        ctk.CTkLabel(create_frame, text="Select Time", font=("Georgia", 14)).pack(pady=(10, 0))
+
+        # Example time slots
+        time_options = [
+            "09:00 AM", "09:30 AM", "10:00 AM", "10:30 AM",
+            "11:00 AM", "11:30 AM", "12:00 PM", "12:30 PM",
+            "01:00 PM", "01:30 PM", "02:00 PM", "02:30 PM",
+            "03:00 PM", "03:30 PM", "04:00 PM", "04:30 PM"
+        ]
+        time_var = tk.StringVar(value="09:00 AM")
+        time_menu = ctk.CTkOptionMenu(create_frame, variable=time_var, values=time_options)
+        time_menu.pack(pady=5)
+
+
+
+        def add_appointment():
+            patient_id = patient_id_entry.get()
+            patient_name = patient_name_entry.get()
+            date = cal.get_date()
+            time=time_var.get()
+
+            if not patient_id or not patient_name:
+                messagebox.showerror("Error", "Please fill all fields.")
+                return
+
+            db.collection("appointments").add({
+                "doctor_id": doctor_id,
+                "patient_id": patient_id,
+                "patient_name": patient_name,
+                "date": date,
+                "time":time,
+                "status": "Pending"
+            })
+
+            messagebox.showinfo("Success", f"Appointment created for {patient_name} on {date}")
+            load_appointments()
+
+        ctk.CTkButton(create_frame, text="Create", fg_color="#275057", text_color="white", command=add_appointment).pack(pady=15)
+
+        # === Right: View Appointments ===
+        view_frame = ctk.CTkScrollableFrame(layout_frame, fg_color="#BADDE0", width=800, height=600)
+        view_frame.grid(row=0, column=1, padx=20, sticky="n")
+        def load_appointments():
+            for widget in view_frame.winfo_children():
+                widget.destroy()
+
+            appts = db.collection("appointments").where("doctor_id", "==", doctor_id).order_by("date").order_by("time").stream()
+
+            for doc in appts:
+                appt = doc.to_dict()
+                appt_id = doc.id
+                if appt.get('status')!="Completed":
+                    card = ctk.CTkFrame(view_frame, fg_color="white", corner_radius=15)
+                    card.pack(fill="x", padx=10, pady=10)
+
+                    lines = [
+                        f"Appointment ID: {appt_id}",
+                        f"Patient Name: {appt.get('patient_name', 'N/A')}",
+                        f"Patient ID: {appt.get('patient_id', 'N/A')}",
+                        f"Date: {appt.get('date', 'N/A')}",
+                        f"Time: {appt.get('time', 'N/A')}",
+                        f"Status: {appt.get('status', 'Pending')}"
+                    ]
+                    for line in lines:
+                        ctk.CTkLabel(card, text=line, font=("Georgia", 14), text_color="black", anchor="w").pack(anchor="w", padx=10)
+
+                    ctk.CTkLabel(card, text="Update Status:", font=("Georgia", 13)).pack(anchor="w", padx=10, pady=(5, 0))
+                    status_var = tk.StringVar(value=appt.get("status", "Pending"))
+                    status_menu = ctk.CTkOptionMenu(card, variable=status_var, values=["Pending", "Approved", "Rejected", "Completed"])
+                    status_menu.pack(anchor="w", padx=10)
+
+                    def save_status(svar=status_var, doc_id=appt_id):
+                        db.collection("appointments").document(doc_id).update({"status": svar.get()})
+                        messagebox.showinfo("Updated", f"Status updated to {svar.get()}")
+                        load_appointments()
+
+                    ctk.CTkButton(card, text="Save", width=100, fg_color="#275057", text_color="white", command=save_status).pack(anchor="e", padx=10, pady=5)
+
+        load_appointments()
+
+    #✨✨✨NOTIFICATIONS PAGE✨✨✨
+    def fetch_notifications(doctor_id):
+        chat_docs = db.collection("chats").where("doctor_id", "==", doctor_id).stream()
+        notifications = defaultdict(list)
+        patient_cache = {}
+
+        for chat in chat_docs:
+            chat_data = chat.to_dict()
+            patient_id = chat_data.get("patient_id")
+
+            # Cache the patient name lookup
+            if patient_id not in patient_cache:
+                patient_ref = db.collection("patients").where("id", "==", patient_id).limit(1).stream()
+                for p in patient_ref:
+                    patient_cache[patient_id] = p.to_dict().get("name", "Unknown")
+                if patient_id not in patient_cache:
+                    patient_cache[patient_id] = "Unknown"
+
+            patient_name = patient_cache[patient_id]
+            messages = chat_data.get("messages", [])
+
+            for msg in messages:
+                if msg["sender_id"] != doctor_id:
+                    timestamp = msg.get("timestamp")
+                    if isinstance(timestamp, datetime):
+                        timestamp = timestamp.astimezone(local_tz)
+                        date_key = timestamp.strftime("%d %b %Y")
+                        time_str = timestamp.strftime("%I:%M %p")
+                    else:
+                        date_key = "Unknown Date"
+                        time_str = "Unknown Time"
+
+                    label = f"Message from {patient_name} (ID: {patient_id})"
+                    notifications[date_key].append((label, f"{msg['text']} ({time_str})"))
+
+        return dict(notifications)
+
+    notifications = fetch_notifications(doctor_id)
+
+    ncanvas = ctk.CTkCanvas(pages["Notifications"], width=3500, height=1100,bg = "#FFFFFF",bd = 0,highlightthickness = 0,relief = "ridge")
+    ncanvas.place(x=0, y=0)
+
+    back_image = Image.open("assets_gui/background.png").resize((3500, 2000), Image.LANCZOS)
+    back_photo = ImageTk.PhotoImage(back_image)
+    ncanvas.create_image(0,0,image=back_photo)
+    ncanvas.backimage = back_photo
+
+    circle_image = Image.open("assets_gui/circle.png").resize((1200, 900), Image.LANCZOS)
+    circle_photo = ImageTk.PhotoImage(circle_image)
+    ncanvas.create_image(10,10,image=circle_photo)
+    ncanvas.circleimage = circle_photo
+
+    circle2_image = Image.open("assets_gui/circle2.png").resize((1200, 900), Image.LANCZOS)
+    circle2_photo = ImageTk.PhotoImage(circle2_image)
+    ncanvas.create_image(1600,1000,image=circle2_photo)
+    ncanvas.circle2image = circle2_photo
+
+    box_image = Image.open("assets_gui/Box.png").resize((1200, 800), Image.LANCZOS)
+    box_photo = ImageTk.PhotoImage(box_image)
+    ncanvas.create_image(850,550,image=box_photo)
+    ncanvas.boximage = box_photo
+
+    ncanvas.create_text(950,16.5,anchor="nw",text="Notifications",fill="#000000",font=("Garamond", 60, 'bold'))
+
+    bell_image = Image.open("assets_gui/bell.png").resize((125, 75), Image.LANCZOS)
+    bell_photo = ImageTk.PhotoImage(bell_image)
+    ncanvas.create_image(1450,55,image=bell_photo)
+    ncanvas.bellimage = bell_photo
+
+    scrollable_frame = ctk.CTkScrollableFrame(
+        ncanvas,
+        width=(app.winfo_screenwidth()/2)+145,
+        height=(app.winfo_screenheight()/2)+145,
+        fg_color="#7F9B9E",
+        bg_color="#7F9B9E"
+    )
+    scrollable_frame.place(x=app.winfo_screenwidth()/7, y=140)
+
+    for date, messages in notifications.items():
+        date_label = ctk.CTkLabel(scrollable_frame, text=date, font=("Georgia", 16, "bold"), text_color="#3D5051")
+        date_label.pack(anchor="w", padx=10, pady=(10, 5))
+        
+        for type_, message in messages:
+            fframe = ctk.CTkFrame(scrollable_frame, fg_color="#BBC4C5", corner_radius=5)
+            fframe.pack(fill="x", pady=5, padx=5)
+
+            title_label = ctk.CTkLabel(fframe, text=type_, font=("Georgia", 18, "bold"), text_color="black")
+            title_label.pack(anchor="w", padx=10, pady=(5, 0))
+
+            message_label = ctk.CTkLabel(fframe, text=message, font=("Georgia", 17), text_color="black", wraplength=250, justify="left")
+            message_label.pack(anchor="w", padx=10, pady=(0, 5))
+
 
 
 

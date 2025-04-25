@@ -2,6 +2,7 @@ import customtkinter as ctk
 from PIL import Image, ImageTk
 import tkinter.messagebox as messagebox
 import doctor_login
+from doctor_login import preload_images
 from firebase_config import db
 
 loaded_images={}
@@ -16,13 +17,13 @@ def preload_images():
 
     for key, data in image_data.items():
         try:
-            image = Image.open(data['path']).resize(data['size'], Image.LANCZOS)
+            image = Image.open(data["path"]).resize(data["size"], Image.LANCZOS)
             loaded_images[key] = ImageTk.PhotoImage(image)
         except Exception as e:
-            print(f"Error loading {data['path']}: {e}")
+            print(f"Error loading {data["path"]}: {e}")
 
 
-preload_images()
+#preload_images()
 
 def create_login_page(app):
 
@@ -76,8 +77,11 @@ def create_login_page(app):
 
     def open_doctor_login_window():
         for widget in app.winfo_children():
-            widget.destroy()  # Remove current widgets
-            doctor_login.create_login_page(app)
+            widget.destroy()
+        if not doctor_login.loaded_images:  # Only preload if not already done
+            doctor_login.preload_images()
+        doctor_login.create_login_page(app)
+
 
 
     # Forgot Password Label
@@ -94,7 +98,7 @@ def create_login_page(app):
     # Tagline at the bottom
     tagline_label = ctk.CTkLabel(app, text="An Intelligent Physiotherapy and Recovery App\nfor Personalized and Remote Care",
                                 font=("Georgia", 20), text_color="black", justify="center", bg_color="#E0E0D7")
-    tagline_label.place(x=15, y=650)
+    tagline_label.place(x=15, y=app.winfo_screenheight()-250)
 
 
 
@@ -113,8 +117,8 @@ def create_login_page(app):
         patients = patients_ref.stream()
         
         for patient in patients:
-            print(f"ID: {patient.get('id')}")
-            return patient.get("id")  # Firestore Document ID
+            print(f"ID: {patient.get("id")}")
+            return patient.get("id") 
             
         return None
 
@@ -131,7 +135,6 @@ def create_login_page(app):
             patient_id=get_patient_id(username)
             if patient_id:
                 current_user["patient_id"]=patient_id
-            #print("Logged-in Patient:", current_user)
             open_third_page(current_user)
 
         else:
@@ -139,6 +142,7 @@ def create_login_page(app):
     # Login Button
     login_button = ctk.CTkButton(app, text="Log In", width=200, height=45, corner_radius=20, fg_color="#092E34", bg_color="#E0E0D7", font=('Arial', 23, 'bold'), command=submit)
     login_button.place(relx=0.75, rely=0.65, anchor="center")
-    
+    app.bind('<Return>', lambda event: submit())
+
 
 

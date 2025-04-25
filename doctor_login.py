@@ -12,7 +12,7 @@ def preload_images():
     "cirtopleft": {"path": "assets_gui/doclog_cirtopleft.png", "size": (1600, 1200)},
     "cirtopright": {"path": "assets_gui/circle2.png", "size": (2100, 1600)},
     "cirbotleft": {"path": "assets_gui/doclog_cirbotleft.png", "size": (1600, 1200)},
-    "cirbotright": {"path": "assets_gui/doclog_cirbotright.png", "size": (2400, 1900)}
+    "cirbotright": {"path": "assets_gui/doclog_cirtopright.png", "size": (2400, 1900)}
     }
 
     for key, data in image_data.items():
@@ -20,10 +20,10 @@ def preload_images():
             image = Image.open(data["path"]).resize(data["size"], Image.LANCZOS)
             loaded_images[key] = ImageTk.PhotoImage(image)
         except Exception as e:
-            print(f"Error loading {data['path']}: {e}")
+            print(f"Error loading {data["path"]}: {e}")
 
 
-preload_images()
+#preload_images()
 
 def create_login_page(app):
     for widget in app.winfo_children():
@@ -37,7 +37,7 @@ def create_login_page(app):
     bg_frame.place(x=0, y=0)
     current_user=None
 
-    canvas = ctk.CTkCanvas(app, width=2000, height=1000, bg="#E0E0D7", highlightthickness=0)
+    canvas = ctk.CTkCanvas(app, width=2000, height=1300, bg="#E0E0D7", highlightthickness=0)
     canvas.place(x=-50, y=-50)
     if "cirtopleft" in loaded_images:
         canvas.create_image(300, -300, image=loaded_images["cirtopleft"])
@@ -120,6 +120,8 @@ def create_login_page(app):
     # Login Button
     login_button = ctk.CTkButton(app, text="Log In", width=200, height=45, corner_radius=20, fg_color="#092E34", bg_color="#E0E0D7", font=('Arial', 23, 'bold'), command=submit)
     login_button.place(relx=0.75, rely=0.65, anchor="center")
+    app.bind('<Return>', lambda event: submit())
+
 
 if __name__ == "__main__":
     ctk.set_appearance_mode("light")  
